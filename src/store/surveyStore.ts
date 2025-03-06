@@ -135,26 +135,19 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       const code = generateSurveyCode(data.city, data.state);
       
       const newSurvey = {
-        id: uuidv4(),
         ...data,
         code,
         questions: [],
       };
 
-      const { error: insertError } = await supabase
+      const { data: createdSurvey, error: insertError } = await supabase
         .from('surveys')
-        .insert([newSurvey]);
-
-      if (insertError) throw insertError;
-
-      const { data: createdSurvey, error: fetchError } = await supabase
-        .from('surveys')
+        .insert([newSurvey])
         .select('*')
-        .eq('id', newSurvey.id)
         .single();
 
-      if (fetchError || !createdSurvey) {
-        throw new Error('Erro ao buscar pesquisa criada');
+      if (insertError || !createdSurvey) {
+        throw new Error(insertError?.message || 'Erro ao criar pesquisa');
       }
 
       set(state => ({
