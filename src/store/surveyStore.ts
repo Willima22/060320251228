@@ -175,7 +175,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         ...survey,
         id: uuidv4(),
         code,
-        currentManager,
+        current_manager: currentManager,
         questions: [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
