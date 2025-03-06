@@ -186,7 +186,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       const { data, error, status } = await supabase
         .from('surveys')
         .insert([newSurvey])
-        .select()
+        .select('id, name, city, state, date, contractor, code, current_manager, questions, created_at, updated_at')
         .single();
         
       if (error) {
