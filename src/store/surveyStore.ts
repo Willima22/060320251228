@@ -117,38 +117,59 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
   createSurvey: async (data) => {
     set({ isLoading: true, error: null });
     try {
+      console.log('Iniciando criação de pesquisa...', data);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('Usuário não está autenticado');
       }
 
+      console.log('Usuário autenticado:', session.user.email);
       const { data: user } = await supabase
         .from('users')
         .select('role')
         .eq('email', session.user.email)
         .single();
 
+      console.log('Perfil do usuário:', user);
       if (!user || user.role !== 'admin') {
         throw new Error('Você não tem permissão para criar pesquisas');
       }
 
       const code = generateSurveyCode(data.city, data.state);
+      console.log('Código gerado:', code);
       
-      const newSurvey = {
-        ...data,
+      const surveyData = {
+        name: data.name,
+        city: data.city,
+        state: data.state,
+        date: data.date,
+        contractor: data.contractor,
+        current_manager: {
+          type: data.current_manager.type,
+          name: data.current_manager.name
+        },
         code,
-        questions: [],
+        questions: []
       };
+
+      console.log('Dados formatados para envio:', surveyData);
 
       const { data: createdSurvey, error: insertError } = await supabase
         .from('surveys')
-        .insert([newSurvey])
-        .select('*')
+        .insert(surveyData)
+        .select()
         .single();
 
-      if (insertError || !createdSurvey) {
-        throw new Error(insertError?.message || 'Erro ao criar pesquisa');
+      if (insertError) {
+        console.error('Erro ao inserir pesquisa:', insertError);
+        throw new Error(insertError.message);
       }
+
+      if (!createdSurvey) {
+        throw new Error('Erro ao criar pesquisa: nenhum dado retornado');
+      }
+
+      console.log('Pesquisa criada com sucesso:', createdSurvey);
 
       set(state => ({
         surveys: [createdSurvey, ...state.surveys],
@@ -156,6 +177,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         isLoading: false,
       }));
     } catch (error) {
+      console.error('Erro completo:', error);
       set({ 
         error: error instanceof Error ? error.message : 'Erro ao criar pesquisa',
         isLoading: false,
