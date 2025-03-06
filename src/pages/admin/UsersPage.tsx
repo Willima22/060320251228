@@ -84,15 +84,36 @@ const UsersPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      await assignSurveyToUser(userToAssign.id, selectedSurveyId);
-      setSuccessMessage('Pesquisa atribuída com sucesso!');
-      setAssignModalOpen(false);
-      setUserToAssign(null);
-      setSelectedSurveyId('');
-      await loadData(); // Recarrega os dados para atualizar a lista
+      console.log('Iniciando atribuição de pesquisa:', {
+        researcher: userToAssign.name,
+        researcherId: userToAssign.id,
+        surveyId: selectedSurveyId,
+        timestamp: new Date().toISOString()
+      });
+
+      const result = await assignSurveyToUser(userToAssign.id, selectedSurveyId);
+      
+      if (result) {
+        console.log('Atribuição realizada com sucesso:', result);
+        setSuccessMessage(`Pesquisa atribuída com sucesso para ${userToAssign.name}!`);
+        setAssignModalOpen(false);
+        setUserToAssign(null);
+        setSelectedSurveyId('');
+        
+        // Recarrega os dados após um breve delay para garantir que o banco foi atualizado
+        setTimeout(() => {
+          loadData();
+        }, 1000);
+      } else {
+        throw new Error('Não foi possível criar a atribuição');
+      }
     } catch (err) {
-      console.error('Erro na atribuição:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário.');
+      console.error('Erro detalhado na atribuição:', err);
+      setError(
+        err instanceof Error 
+          ? `Erro ao atribuir pesquisa: ${err.message}` 
+          : 'Erro ao atribuir pesquisa ao usuário.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -100,6 +121,8 @@ const UsersPage: React.FC = () => {
 
   const handleCloseAssignModal = useCallback(() => {
     setAssignModalOpen(false);
+    setUserToAssign(null);
+    setSelectedSurveyId('');
     setError(null);
     clearError();
   }, [clearError]);

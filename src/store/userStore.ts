@@ -209,7 +209,8 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       console.log('Iniciando processo de atribuição:', {
         researcherId,
-        surveyId
+        surveyId,
+        timestamp: new Date().toISOString()
       });
 
       // Verificar se o pesquisador existe e é um pesquisador
@@ -264,23 +265,24 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       if (existingAssignment) {
         console.log('Atribuição já existe:', existingAssignment);
-        return;
+        return existingAssignment;
       }
 
       // Criar nova atribuição
-      const assignment: SurveyAssignment = {
+      const newAssignment = {
+        id: crypto.randomUUID(), // Garante um ID único
         researcher_id: researcherId,
         survey_id: surveyId,
         status: 'pending',
         assigned_at: new Date().toISOString()
       };
 
-      console.log('Criando nova atribuição:', assignment);
+      console.log('Tentando criar nova atribuição:', newAssignment);
 
       const { data: createdAssignment, error: insertError } = await supabase
         .from('survey_assignments')
-        .insert([assignment])
-        .select('*')
+        .insert([newAssignment])
+        .select('*, survey:surveys(*)')
         .single();
 
       if (insertError) {
@@ -297,6 +299,15 @@ export const useUserStore = create<UserState>((set, get) => ({
         survey: survey.name,
         assignment: createdAssignment
       });
+
+      // Atualiza o estado local se necessário
+      const state = get();
+      if (state.currentUser?.id === researcherId) {
+        set(state => ({
+          ...state,
+          assignments: [...(state.assignments || []), createdAssignment]
+        }));
+      }
       
       set({ isLoading: false });
       return createdAssignment;
