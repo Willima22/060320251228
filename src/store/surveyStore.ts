@@ -28,19 +28,69 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
   fetchSurveys: async () => {
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await supabase
+      console.log('Verificando autenticação...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Erro ao verificar sessão:', sessionError);
+        set({ error: 'Erro ao verificar autenticação', isLoading: false });
+        return;
+      }
+      
+      if (!session) {
+        console.error('Usuário não está autenticado');
+        set({ error: 'Usuário não está autenticado', isLoading: false });
+        return;
+      }
+
+      console.log('Usuário autenticado:', session.user.email);
+      
+      // Verificar se o usuário existe na tabela users
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', session.user.email)
+        .single();
+        
+      if (userError) {
+        console.error('Erro ao buscar perfil do usuário:', userError);
+        set({ error: 'Erro ao buscar perfil do usuário', isLoading: false });
+        return;
+      }
+      
+      if (!userData) {
+        console.error('Usuário não encontrado na tabela users');
+        set({ error: 'Usuário não encontrado', isLoading: false });
+        return;
+      }
+
+      console.log('Perfil do usuário:', userData);
+      console.log('Iniciando busca de pesquisas...');
+      
+      const { data, error, status } = await supabase
         .from('surveys')
         .select('*')
         .order('createdAt', { ascending: false });
         
       if (error) {
-        set({ error: error.message, isLoading: false });
+        console.error('Erro ao buscar pesquisas:', error);
+        console.error('Status da resposta:', status);
+        set({ error: `Erro ao buscar pesquisas: ${error.message} (Status: ${status})`, isLoading: false });
         return;
       }
       
+      if (!data) {
+        console.warn('Nenhuma pesquisa encontrada');
+        set({ surveys: [], isLoading: false });
+        return;
+      }
+
+      console.log('Pesquisas encontradas:', data.length);
+      console.log('Dados das pesquisas:', data);
       set({ surveys: data as Survey[], isLoading: false });
     } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+      console.error('Erro inesperado ao buscar pesquisas:', err);
+      set({ error: 'Ocorreu um erro inesperado ao buscar as pesquisas', isLoading: false });
     }
   },
   

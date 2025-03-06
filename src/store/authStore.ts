@@ -27,11 +27,14 @@ export const useAuthStore = create<AuthState>()(
           const { data, error } = await supabaseSignIn(email, password);
           
           if (error) {
+            console.error('Erro na autenticação:', error);
             set({ error: error.message, isLoading: false });
             return;
           }
           
           if (data.user) {
+            console.log('Usuário autenticado no Supabase:', data.user.email);
+            
             // Fetch user profile from our custom table
             const { data: userData, error: userError } = await supabase
               .from('users')
@@ -40,10 +43,18 @@ export const useAuthStore = create<AuthState>()(
               .single();
               
             if (userError) {
+              console.error('Erro ao buscar perfil do usuário:', userError);
               set({ error: userError.message, isLoading: false });
               return;
             }
             
+            if (!userData) {
+              console.error('Usuário não encontrado na tabela users');
+              set({ error: 'Usuário não encontrado', isLoading: false });
+              return;
+            }
+            
+            console.log('Perfil do usuário encontrado:', userData);
             set({ 
               user: userData as User, 
               isAuthenticated: true, 
@@ -51,7 +62,8 @@ export const useAuthStore = create<AuthState>()(
             });
           }
         } catch (err) {
-          set({ error: 'An unexpected error occurred', isLoading: false });
+          console.error('Erro inesperado no login:', err);
+          set({ error: 'Ocorreu um erro inesperado', isLoading: false });
         }
       },
       
