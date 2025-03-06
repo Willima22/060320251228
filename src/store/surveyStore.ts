@@ -183,22 +183,28 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       
       console.log('Tentando criar pesquisa:', newSurvey);
       
-      const { data, error, status } = await supabase
+      // Primeiro, inserir a pesquisa
+      const { error: insertError, status } = await supabase
         .from('surveys')
-        .insert([newSurvey])
-        .select('id, name, city, state, date, contractor, code, current_manager, questions, created_at, updated_at')
-        .single();
+        .insert([newSurvey]);
         
-      if (error) {
-        console.error('Erro ao criar pesquisa:', error);
+      if (insertError) {
+        console.error('Erro ao criar pesquisa:', insertError);
         console.error('Status da resposta:', status);
-        set({ error: `Erro ao criar pesquisa: ${error.message} (Status: ${status})`, isLoading: false });
+        set({ error: `Erro ao criar pesquisa: ${insertError.message} (Status: ${status})`, isLoading: false });
         return;
       }
-      
-      if (!data) {
-        console.error('Pesquisa criada mas não retornou dados');
-        set({ error: 'Erro ao criar pesquisa: dados não retornados', isLoading: false });
+
+      // Depois, buscar a pesquisa criada
+      const { data, error: fetchError } = await supabase
+        .from('surveys')
+        .select('*')
+        .eq('id', newSurvey.id)
+        .single();
+        
+      if (fetchError || !data) {
+        console.error('Erro ao buscar pesquisa criada:', fetchError);
+        set({ error: 'Erro ao buscar pesquisa criada', isLoading: false });
         return;
       }
       
