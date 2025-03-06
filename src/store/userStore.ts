@@ -144,32 +144,45 @@ export const useUserStore = create<UserState>((set, get) => ({
   deleteUser: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      // Delete user from our custom table
+      console.log('Iniciando exclusão do usuário:', id);
+
+      // Delete user from our custom table first
       const { error: profileError } = await supabase
         .from('users')
         .delete()
         .eq('id', id);
         
       if (profileError) {
-        set({ error: profileError.message, isLoading: false });
-        return;
+        console.error('Erro ao excluir perfil:', profileError);
+        throw new Error(profileError.message);
       }
+
+      console.log('Perfil excluído com sucesso');
       
       // Delete user from auth
       const { error: authError } = await supabase.auth.admin.deleteUser(id);
       
       if (authError) {
-        set({ error: authError.message, isLoading: false });
-        return;
+        console.error('Erro ao excluir auth user:', authError);
+        throw new Error(authError.message);
       }
+
+      console.log('Auth user excluído com sucesso');
       
       set(state => ({
         users: state.users.filter(user => user.id !== id),
         currentUser: state.currentUser?.id === id ? null : state.currentUser,
         isLoading: false
       }));
-    } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+
+      console.log('Usuário excluído com sucesso do estado local');
+    } catch (error) {
+      console.error('Erro completo:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Erro ao excluir usuário',
+        isLoading: false 
+      });
+      throw error;
     }
   },
   
