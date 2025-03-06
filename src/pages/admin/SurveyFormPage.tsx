@@ -81,14 +81,22 @@ const SurveyFormPage: React.FC = () => {
     setError(null);
 
     try {
+      console.log('Enviando dados do formulário:', data);
+      
       if (isEditMode && id) {
         await updateSurvey(id, data);
       } else {
         await createSurvey(data);
       }
-      navigate('/surveys');
+
+      // Só navega se não houver erro
+      if (!error) {
+        console.log('Operação concluída com sucesso, redirecionando...');
+        navigate('/surveys');
+      }
     } catch (err) {
-      setError('Erro ao salvar pesquisa.');
+      console.error('Erro ao salvar pesquisa:', err);
+      setError('Erro ao salvar pesquisa. Por favor, tente novamente.');
     } finally {
       setIsLoading(false);
     }

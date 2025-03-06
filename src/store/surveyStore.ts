@@ -117,7 +117,51 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
   createSurvey: async (survey) => {
     set({ isLoading: true, error: null });
     try {
-      // Generate a unique code for the survey
+      console.log('Iniciando criação de pesquisa...', survey);
+      
+      // Verificar autenticação
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Erro ao verificar sessão:', sessionError);
+        set({ error: 'Erro ao verificar autenticação', isLoading: false });
+        return;
+      }
+      
+      if (!session) {
+        console.error('Usuário não está autenticado');
+        set({ error: 'Usuário não está autenticado', isLoading: false });
+        return;
+      }
+
+      console.log('Usuário autenticado:', session.user.email);
+      
+      // Verificar se o usuário existe na tabela users e é admin
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', session.user.email)
+        .single();
+        
+      if (userError) {
+        console.error('Erro ao buscar perfil do usuário:', userError);
+        set({ error: 'Erro ao buscar perfil do usuário', isLoading: false });
+        return;
+      }
+      
+      if (!userData) {
+        console.error('Usuário não encontrado na tabela users');
+        set({ error: 'Usuário não encontrado', isLoading: false });
+        return;
+      }
+
+      if (userData.role !== 'admin') {
+        console.error('Usuário não tem permissão para criar pesquisas');
+        set({ error: 'Você não tem permissão para criar pesquisas', isLoading: false });
+        return;
+      }
+
+      console.log('Gerando código da pesquisa...');
       const code = generateSurveyCode(survey.city, survey.state);
       
       const newSurvey = {
@@ -129,22 +173,35 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         updatedAt: new Date().toISOString(),
       };
       
-      const { error } = await supabase
+      console.log('Tentando criar pesquisa:', newSurvey);
+      
+      const { data, error } = await supabase
         .from('surveys')
-        .insert(newSurvey);
+        .insert([newSurvey])
+        .select()
+        .single();
         
       if (error) {
-        set({ error: error.message, isLoading: false });
+        console.error('Erro ao criar pesquisa:', error);
+        set({ error: `Erro ao criar pesquisa: ${error.message}`, isLoading: false });
         return;
       }
       
+      if (!data) {
+        console.error('Pesquisa criada mas não retornou dados');
+        set({ error: 'Erro ao criar pesquisa: dados não retornados', isLoading: false });
+        return;
+      }
+      
+      console.log('Pesquisa criada com sucesso:', data);
       set(state => ({ 
-        surveys: [newSurvey, ...state.surveys],
-        currentSurvey: newSurvey,
+        surveys: [data, ...state.surveys],
+        currentSurvey: data,
         isLoading: false 
       }));
     } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+      console.error('Erro inesperado ao criar pesquisa:', err);
+      set({ error: 'Ocorreu um erro inesperado ao criar a pesquisa', isLoading: false });
     }
   },
   
