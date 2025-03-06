@@ -190,10 +190,14 @@ const ResearcherDashboardPage: React.FC = () => {
         console.log('❌ Erro ao acessar tabela survey_assignments:', assignmentsError);
       } else {
         console.log('✅ Acesso à tabela survey_assignments OK:', assignmentsData);
+        console.log('📊 Número de atribuições encontradas:', assignmentsData?.length || 0);
+        if (assignmentsData?.length > 0) {
+          console.log('📝 Primeira atribuição:', assignmentsData[0]);
+        }
       }
 
       // 3. Teste de leitura da tabela surveys
-      console.log('3️⃣ Testando acesso à tabela surveys...');
+      console.log('3️⃣ Testando acesso direto à tabela surveys...');
       const { data: surveysData, error: surveysError } = await supabase
         .from('surveys')
         .select('*');
@@ -202,6 +206,7 @@ const ResearcherDashboardPage: React.FC = () => {
         console.log('❌ Erro ao acessar tabela surveys:', surveysError);
       } else {
         console.log('✅ Acesso à tabela surveys OK:', surveysData);
+        console.log('📊 Número de pesquisas acessíveis:', surveysData?.length || 0);
       }
 
       // 4. Teste de join entre survey_assignments e surveys
@@ -215,14 +220,36 @@ const ResearcherDashboardPage: React.FC = () => {
           status,
           assigned_at,
           completed_at,
-          survey:surveys(*)
+          survey:surveys!inner(*)
         `)
         .eq('researcher_id', user.id);
 
       if (joinError) {
         console.log('❌ Erro ao fazer join:', joinError);
+        console.log('📝 Detalhes do erro:', joinError);
       } else {
         console.log('✅ Join OK:', joinData);
+        console.log('📊 Número de registros após join:', joinData?.length || 0);
+        if (joinData?.length > 0) {
+          console.log('📝 Primeiro registro com join:', joinData[0]);
+        }
+      }
+
+      // 5. Teste de acesso direto a uma pesquisa específica
+      if (assignmentsData?.length > 0) {
+        const firstAssignment = assignmentsData[0];
+        console.log('5️⃣ Testando acesso direto a uma pesquisa específica...');
+        const { data: specificSurvey, error: specificError } = await supabase
+          .from('surveys')
+          .select('*')
+          .eq('id', firstAssignment.survey_id)
+          .single();
+
+        if (specificError) {
+          console.log('❌ Erro ao acessar pesquisa específica:', specificError);
+        } else {
+          console.log('✅ Acesso à pesquisa específica OK:', specificSurvey);
+        }
       }
 
       console.log('🏁 Testes de permissão concluídos');
