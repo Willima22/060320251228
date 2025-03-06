@@ -14,6 +14,15 @@ interface UserState {
   deleteUser: (id: string) => Promise<void>;
   getUser: (id: string) => Promise<void>;
   assignSurveyToUser: (researcherId: string, surveyId: string) => Promise<void>;
+  clearError: () => void;
+}
+
+// Interface para melhorar a tipagem das atribuições
+interface SurveyAssignment {
+  researcher_id: string;
+  survey_id: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  assigned_at: string;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -21,6 +30,8 @@ export const useUserStore = create<UserState>((set, get) => ({
   currentUser: null,
   isLoading: false,
   error: null,
+  
+  clearError: () => set({ error: null }),
   
   fetchUsers: async () => {
     set({ isLoading: true, error: null });
@@ -30,14 +41,15 @@ export const useUserStore = create<UserState>((set, get) => ({
         .select('*')
         .order('name');
         
-      if (error) {
-        set({ error: error.message, isLoading: false });
-        return;
-      }
+      if (error) throw error;
       
       set({ users: data as User[], isLoading: false });
     } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+      console.error('Erro ao buscar usuários:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Erro ao buscar usuários',
+        isLoading: false 
+      });
     }
   },
   
@@ -46,7 +58,6 @@ export const useUserStore = create<UserState>((set, get) => ({
     try {
       console.log('Iniciando criação de usuário...', userData);
       
-      // First create the auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password || 'tempPassword123',
@@ -55,24 +66,15 @@ export const useUserStore = create<UserState>((set, get) => ({
             name: userData.name,
             role: userData.role,
           },
-          emailRedirectTo: `${window.location.origin}/?confirmation=true`
+          emailRedirectTo: `${window.location.origin}/confirm-email`
         }
       });
       
-      console.log('Resposta da criação do auth user:', authData);
-      
-      if (authError) {
-        console.error('Erro ao criar auth user:', authError);
-        throw new Error(authError.message);
-      }
-      
-      if (!authData.user) {
-        throw new Error('Falha ao criar usuário na autenticação');
-      }
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Falha ao criar usuário na autenticação');
 
       console.log('Auth user criado com sucesso:', authData.user);
       
-      // Then create the user profile
       const userProfile = {
         id: authData.user.id,
         name: userData.name,
@@ -81,8 +83,6 @@ export const useUserStore = create<UserState>((set, get) => ({
         role: userData.role,
         first_access: true
       };
-
-      console.log('Dados do perfil para criação:', userProfile);
       
       const { data: createdUser, error: profileError } = await supabase
         .from('users')
@@ -90,14 +90,8 @@ export const useUserStore = create<UserState>((set, get) => ({
         .select()
         .single();
         
-      if (profileError) {
-        console.error('Erro ao criar perfil:', profileError);
-        throw new Error(profileError.message);
-      }
-
-      if (!createdUser) {
-        throw new Error('Erro ao criar perfil: nenhum dado retornado');
-      }
+      if (profileError) throw profileError;
+      if (!createdUser) throw new Error('Erro ao criar perfil: nenhum dado retornado');
 
       console.log('Usuário criado com sucesso:', createdUser);
       
@@ -106,7 +100,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         isLoading: false 
       }));
     } catch (error) {
-      console.error('Erro completo:', error);
+      console.error('Erro ao criar usuário:', error);
       set({ 
         error: error instanceof Error ? error.message : 'Erro ao criar usuário',
         isLoading: false 
@@ -123,10 +117,7 @@ export const useUserStore = create<UserState>((set, get) => ({
         .update(userData)
         .eq('id', id);
         
-      if (error) {
-        set({ error: error.message, isLoading: false });
-        return;
-      }
+      if (error) throw error;
       
       set(state => ({
         users: state.users.map(user => 
@@ -138,37 +129,37 @@ export const useUserStore = create<UserState>((set, get) => ({
         isLoading: false
       }));
     } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+      console.error('Erro ao atualizar usuário:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Erro ao atualizar usuário',
+        isLoading: false 
+      });
+      throw err;
     }
   },
   
   deleteUser: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      console.log('Iniciando exclusão do usuário:', id);
+      // Primeiro remove as atribuições de pesquisa
+      const { error: assignmentsError } = await supabase
+        .from('survey_assignments')
+        .delete()
+        .eq('researcher_id', id);
+        
+      if (assignmentsError) throw assignmentsError;
 
-      // Delete user from our custom table first
+      // Remove o perfil do usuário
       const { error: profileError } = await supabase
         .from('users')
         .delete()
         .eq('id', id);
         
-      if (profileError) {
-        console.error('Erro ao excluir perfil:', profileError);
-        throw new Error(profileError.message);
-      }
-
-      console.log('Perfil excluído com sucesso');
+      if (profileError) throw profileError;
       
-      // Delete user from auth
+      // Remove o usuário da autenticação
       const { error: authError } = await supabase.auth.admin.deleteUser(id);
-      
-      if (authError) {
-        console.error('Erro ao excluir auth user:', authError);
-        throw new Error(authError.message);
-      }
-
-      console.log('Auth user excluído com sucesso');
+      if (authError) throw authError;
       
       set(state => ({
         users: state.users.filter(user => user.id !== id),
@@ -176,9 +167,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         isLoading: false
       }));
 
-      console.log('Usuário excluído com sucesso do estado local');
+      console.log('Usuário excluído com sucesso');
     } catch (error) {
-      console.error('Erro completo:', error);
+      console.error('Erro ao excluir usuário:', error);
       set({ 
         error: error instanceof Error ? error.message : 'Erro ao excluir usuário',
         isLoading: false 
@@ -196,54 +187,46 @@ export const useUserStore = create<UserState>((set, get) => ({
         .eq('id', id)
         .single();
         
-      if (error) {
-        set({ error: error.message, isLoading: false });
-        return;
-      }
+      if (error) throw error;
       
       set({ currentUser: data as User, isLoading: false });
     } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+      console.error('Erro ao buscar usuário:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Erro ao buscar usuário',
+        isLoading: false 
+      });
+      throw err;
     }
   },
   
   assignSurveyToUser: async (researcherId: string, surveyId: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Validar parâmetros
       if (!researcherId || !surveyId) {
         throw new Error('ID do pesquisador e da pesquisa são obrigatórios');
       }
 
-      console.log('Atribuindo pesquisa:', { researcherId, surveyId });
-      
-      // Verificar se o pesquisador existe
+      // Verificar se o pesquisador existe e é um pesquisador
       const { data: researcher, error: researcherError } = await supabase
         .from('users')
-        .select('role')
+        .select('role, name')
         .eq('id', researcherId)
         .single();
 
-      if (researcherError || !researcher) {
-        console.error('Erro ao verificar pesquisador:', researcherError);
-        throw new Error('Pesquisador não encontrado');
-      }
-
-      if (researcher.role !== 'researcher') {
-        throw new Error('Usuário não é um pesquisador');
-      }
+      if (researcherError) throw researcherError;
+      if (!researcher) throw new Error('Pesquisador não encontrado');
+      if (researcher.role !== 'researcher') throw new Error('Usuário não é um pesquisador');
 
       // Verificar se a pesquisa existe
       const { data: survey, error: surveyError } = await supabase
         .from('surveys')
-        .select('id')
+        .select('id, name')
         .eq('id', surveyId)
         .single();
 
-      if (surveyError || !survey) {
-        console.error('Erro ao verificar pesquisa:', surveyError);
-        throw new Error('Pesquisa não encontrada');
-      }
+      if (surveyError) throw surveyError;
+      if (!survey) throw new Error('Pesquisa não encontrada');
       
       // Verificar se já existe uma atribuição
       const { data: existingAssignment, error: existingError } = await supabase
@@ -251,44 +234,44 @@ export const useUserStore = create<UserState>((set, get) => ({
         .select('*')
         .eq('researcher_id', researcherId)
         .eq('survey_id', surveyId)
-        .single();
+        .maybeSingle();
 
-      if (existingError && existingError.code !== 'PGRST116') {
-        console.error('Erro ao verificar atribuição existente:', existingError);
-        throw existingError;
-      }
-
+      if (existingError) throw existingError;
       if (existingAssignment) {
-        console.log('Atribuição já existe');
-        set({ isLoading: false });
+        console.log('Atribuição já existe para:', {
+          researcher: researcher.name,
+          survey: survey.name
+        });
         return;
       }
 
-      const now = new Date().toISOString();
-      
       // Criar nova atribuição
+      const assignment: SurveyAssignment = {
+        researcher_id: researcherId,
+        survey_id: surveyId,
+        status: 'pending',
+        assigned_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('survey_assignments')
-        .insert([{
-          researcher_id: researcherId,
-          survey_id: surveyId,
-          status: 'pending',
-          assigned_at: now
-        }])
+        .insert([assignment])
         .select('*')
         .single();
 
-      if (error) {
-        console.error('Erro ao criar atribuição:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      console.log('Atribuição criada com sucesso:', data);
+      console.log('Pesquisa atribuída com sucesso:', {
+        researcher: researcher.name,
+        survey: survey.name,
+        assignment: data
+      });
+      
       set({ isLoading: false });
     } catch (err) {
       console.error('Erro ao atribuir pesquisa:', err);
       set({ 
-        error: err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário', 
+        error: err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário',
         isLoading: false 
       });
       throw err;

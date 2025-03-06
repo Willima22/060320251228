@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Edit, Plus, Trash, ClipboardList } from 'lucide-react';
 import { useUserStore } from '../../store/userStore';
 import { useSurveyStore } from '../../store/surveyStore';
@@ -7,56 +7,73 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import Alert from '../../components/ui/Alert';
 import Modal from '../../components/ui/Modal';
 import { User } from '../../types';
+import { useNavigate } from 'react-router-dom';
 
 const UsersPage: React.FC = () => {
-  const { users, fetchUsers, deleteUser, assignSurveyToUser } = useUserStore();
+  const navigate = useNavigate();
+  const { users, fetchUsers, deleteUser, assignSurveyToUser, clearError } = useUserStore();
   const { surveys, fetchSurveys } = useSurveyStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [userToAssign, setUserToAssign] = useState<User | null>(null);
   const [selectedSurveyId, setSelectedSurveyId] = useState<string>('');
 
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await Promise.all([fetchUsers(), fetchSurveys()]);
-      } catch (err) {
-        setError('Erro ao carregar dados.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await Promise.all([fetchUsers(), fetchSurveys()]);
+    } catch (err) {
+      setError('Erro ao carregar dados. Por favor, tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
   }, [fetchUsers, fetchSurveys]);
 
-  const handleDeleteClick = (id: string) => {
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Limpa mensagens de sucesso após 3 segundos
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  const handleDeleteClick = useCallback((id: string) => {
     setUserToDelete(id);
     setDeleteModalOpen(true);
-  };
+  }, []);
 
   const handleConfirmDelete = async () => {
     if (!userToDelete) return;
 
+    setIsLoading(true);
+    setError(null);
     try {
       await deleteUser(userToDelete);
       setDeleteModalOpen(false);
       setUserToDelete(null);
+      setSuccessMessage('Usuário excluído com sucesso!');
     } catch (err) {
-      setError('Erro ao excluir usuário.');
+      setError('Erro ao excluir usuário. Por favor, tente novamente.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleAssignClick = (user: User) => {
+  const handleAssignClick = useCallback((user: User) => {
     setUserToAssign(user);
     setSelectedSurveyId('');
+    setError(null);
     setAssignModalOpen(true);
-  };
+  }, []);
 
   const handleConfirmAssign = async () => {
     if (!userToAssign || !selectedSurveyId) {
@@ -64,57 +81,60 @@ const UsersPage: React.FC = () => {
       return;
     }
 
+    setIsLoading(true);
+    setError(null);
     try {
-      setIsLoading(true);
-      setError(null);
-      
-      console.log('Iniciando atribuição:', {
-        researcherId: userToAssign.id,
-        surveyId: selectedSurveyId
-      });
-      
       await assignSurveyToUser(userToAssign.id, selectedSurveyId);
-      console.log('Atribuição concluída com sucesso');
-      
-      // Mostrar mensagem de sucesso temporária
-      const successMessage = document.createElement('div');
-      successMessage.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-      successMessage.textContent = 'Pesquisa atribuída com sucesso!';
-      document.body.appendChild(successMessage);
-      setTimeout(() => successMessage.remove(), 3000);
-      
+      setSuccessMessage('Pesquisa atribuída com sucesso!');
       setAssignModalOpen(false);
       setUserToAssign(null);
       setSelectedSurveyId('');
+      await loadData(); // Recarrega os dados para atualizar a lista
     } catch (err) {
-      console.error('Erro detalhado na atribuição:', err);
-      let errorMessage = 'Erro ao atribuir pesquisa ao usuário.';
-      
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === 'object' && err !== null) {
-        errorMessage = JSON.stringify(err);
-      }
-      
-      setError(errorMessage);
+      console.error('Erro na atribuição:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleCloseAssignModal = useCallback(() => {
+    setAssignModalOpen(false);
+    setError(null);
+    clearError();
+  }, [clearError]);
+
   const researcherUsers = users.filter(user => user.role === 'researcher');
 
+  const navigateToNewUser = useCallback(() => {
+    navigate('/users/new');
+  }, [navigate]);
+
+  const navigateToEditUser = useCallback((userId: string) => {
+    navigate(`/users/${userId}/edit`);
+  }, [navigate]);
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Usuários Pesquisadores</h1>
-        <Button onClick={() => window.location.href = '/users/new'}>
+        <Button onClick={navigateToNewUser}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Usuário
         </Button>
       </div>
 
-      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+      {error && (
+        <Alert variant="error" className="mb-4">
+          {error}
+        </Alert>
+      )}
+
+      {successMessage && (
+        <Alert variant="success" className="mb-4">
+          {successMessage}
+        </Alert>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
@@ -150,7 +170,7 @@ const UsersPage: React.FC = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.location.href = `/users/${user.id}/edit`}
+                        onClick={() => navigateToEditUser(user.id)}
                         title="Editar"
                       >
                         <Edit className="h-4 w-4" />
@@ -173,7 +193,7 @@ const UsersPage: React.FC = () => {
       ) : (
         <div className="bg-white rounded-lg shadow p-6 text-center">
           <p className="text-gray-500 mb-4">Nenhum usuário pesquisador encontrado.</p>
-          <Button onClick={() => window.location.href = '/users/new'}>
+          <Button onClick={navigateToNewUser}>
             <Plus className="h-4 w-4 mr-2" />
             Criar Usuário
           </Button>
@@ -190,24 +210,24 @@ const UsersPage: React.FC = () => {
           <Button
             variant="outline"
             onClick={() => setDeleteModalOpen(false)}
+            disabled={isLoading}
           >
             Cancelar
           </Button>
           <Button
             variant="danger"
             onClick={handleConfirmDelete}
+            disabled={isLoading}
+            isLoading={isLoading}
           >
-            Excluir
+            {isLoading ? 'Excluindo...' : 'Excluir'}
           </Button>
         </div>
       </Modal>
 
       <Modal
         isOpen={assignModalOpen}
-        onClose={() => {
-          setAssignModalOpen(false);
-          setError(null);
-        }}
+        onClose={handleCloseAssignModal}
         title="Atribuir Pesquisa"
       >
         <div className="space-y-4">
@@ -229,6 +249,7 @@ const UsersPage: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={selectedSurveyId}
               onChange={(e) => setSelectedSurveyId(e.target.value)}
+              disabled={isLoading}
             >
               <option value="">Selecione uma pesquisa</option>
               {surveys.map((survey) => (
@@ -242,10 +263,8 @@ const UsersPage: React.FC = () => {
           <div className="flex justify-end space-x-2 pt-4">
             <Button
               variant="outline"
-              onClick={() => {
-                setAssignModalOpen(false);
-                setError(null);
-              }}
+              onClick={handleCloseAssignModal}
+              disabled={isLoading}
             >
               Cancelar
             </Button>

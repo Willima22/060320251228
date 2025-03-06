@@ -8,9 +8,13 @@ import { Link } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import Alert from '../../components/ui/Alert';
 
+interface AssignmentWithSurvey extends SurveyAssignment {
+  survey: Survey;
+}
+
 const ResearcherDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
-  const [assignments, setAssignments] = useState<(SurveyAssignment & { survey: Survey })[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentWithSurvey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +29,6 @@ const ResearcherDashboardPage: React.FC = () => {
     setError(null);
 
     try {
-      // Buscar atribuições com detalhes da pesquisa
       const { data, error } = await supabase
         .from('survey_assignments')
         .select(`
@@ -40,37 +43,32 @@ const ResearcherDashboardPage: React.FC = () => {
         .eq('researcher_id', user.id)
         .order('assigned_at', { ascending: false });
 
-      if (error) {
-        console.error('Erro do Supabase:', error);
-        throw error;
-      }
-
-      console.log('Dados retornados do Supabase:', data);
+      if (error) throw error;
 
       if (!data) {
-        console.log('Nenhum dado retornado');
+        console.log('Nenhuma atribuição encontrada');
         setAssignments([]);
         return;
       }
 
-      // Transformar os dados para o formato esperado
-      const formattedAssignments = data.map(item => {
-        console.log('Processando item:', item);
-        if (!item.survey) {
-          console.warn('Item sem dados da pesquisa:', item);
-          return null;
-        }
-        return {
+      const validAssignments = data
+        .filter((item): item is AssignmentWithSurvey => {
+          if (!item.survey) {
+            console.warn('Item sem dados da pesquisa:', item);
+            return false;
+          }
+          return true;
+        })
+        .map(item => ({
           ...item,
           survey: item.survey as Survey
-        };
-      }).filter(Boolean) as (SurveyAssignment & { survey: Survey })[];
+        }));
 
-      console.log('Atribuições formatadas:', formattedAssignments);
-      setAssignments(formattedAssignments);
+      console.log('Atribuições carregadas:', validAssignments.length);
+      setAssignments(validAssignments);
     } catch (err) {
-      console.error('Erro detalhado ao carregar pesquisas:', err);
-      setError('Erro ao carregar pesquisas atribuídas.');
+      console.error('Erro ao carregar pesquisas:', err);
+      setError('Erro ao carregar pesquisas atribuídas. Por favor, tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -90,17 +88,40 @@ const ResearcherDashboardPage: React.FC = () => {
           table: 'survey_assignments',
           filter: `researcher_id=eq.${user?.id}`
         },
-        () => {
-          console.log('Mudança detectada nas atribuições');
+        (payload) => {
+          console.log('Mudança detectada nas atribuições:', payload);
           fetchAssignments();
         }
       )
       .subscribe();
 
     return () => {
+      console.log('Cancelando inscrição de atualizações em tempo real');
       assignmentsSubscription.unsubscribe();
     };
   }, [user, fetchAssignments]);
+
+  const getStatusText = (status: string): string => {
+    switch (status) {
+      case 'completed':
+        return 'Concluída';
+      case 'in_progress':
+        return 'Em Andamento';
+      default:
+        return 'Pendente';
+    }
+  };
+
+  const getStatusStyle = (status: string): string => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in_progress':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   if (isLoading) {
     return (
@@ -111,12 +132,24 @@ const ResearcherDashboardPage: React.FC = () => {
   }
 
   if (error) {
-    return <Alert variant="error">{error}</Alert>;
+    return (
+      <Alert variant="error" className="mb-4">
+        {error}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchAssignments}
+          className="mt-2"
+        >
+          Tentar Novamente
+        </Button>
+      </Alert>
+    );
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Minhas Pesquisas</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Minhas Pesquisas</h1>
 
       {assignments.length === 0 ? (
         <Card>
@@ -132,34 +165,44 @@ const ResearcherDashboardPage: React.FC = () => {
             <Card key={assignment.id}>
               <CardContent className="p-6">
                 <div className="flex justify-between items-center">
-                  <div>
+                  <div className="space-y-2">
                     <h3 className="text-lg font-medium">{assignment.survey.name}</h3>
                     <p className="text-sm text-gray-500">
                       {assignment.survey.city}, {assignment.survey.state}
                     </p>
-                    <div className="mt-2">
+                    <div className="flex items-center space-x-2">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          assignment.status === 'completed'
-                            ? 'bg-green-100 text-green-800'
-                            : assignment.status === 'in_progress'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(
+                          assignment.status
+                        )}`}
                       >
-                        {assignment.status === 'completed'
-                          ? 'Concluída'
-                          : assignment.status === 'in_progress'
-                          ? 'Em Andamento'
-                          : 'Pendente'}
+                        {getStatusText(assignment.status)}
                       </span>
+                      {assignment.assigned_at && (
+                        <span className="text-xs text-gray-500">
+                          Atribuída em: {new Date(assignment.assigned_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      {assignment.completed_at && (
+                        <span className="text-xs text-gray-500">
+                          Concluída em: {new Date(assignment.completed_at).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Link to={`/surveys/${assignment.survey_id}/fill`}>
                     <Button>
-                      {assignment.status === 'completed'
-                        ? 'Ver Respostas'
-                        : 'Preencher Pesquisa'}
+                      {assignment.status === 'completed' ? (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Ver Respostas
+                        </>
+                      ) : (
+                        <>
+                          <ClipboardList className="h-4 w-4 mr-2" />
+                          Preencher Pesquisa
+                        </>
+                      )}
                     </Button>
                   </Link>
                 </div>
