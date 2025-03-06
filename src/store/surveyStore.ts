@@ -28,7 +28,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
   fetchSurveys: async () => {
     set({ isLoading: true, error: null });
     try {
-      console.log('Verificando autenticação...');
+      console.log('Iniciando busca de pesquisas...');
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
@@ -67,10 +67,30 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       console.log('Perfil do usuário:', userData);
       console.log('Iniciando busca de pesquisas...');
       
-      const { data, error, status } = await supabase
+      // Buscar pesquisas com base no papel do usuário
+      let query = supabase
         .from('surveys')
         .select('*')
-        .order('createdAt', { ascending: false });
+        .order('created_at', { ascending: false });
+
+      // Se for pesquisador, buscar apenas pesquisas atribuídas
+      if (userData.role === 'researcher') {
+        const { data: assignments, error: assignmentError } = await supabase
+          .from('survey_assignments')
+          .select('surveyId')
+          .eq('researcherId', userData.id);
+
+        if (assignmentError) {
+          console.error('Erro ao buscar atribuições:', assignmentError);
+          set({ error: 'Erro ao buscar atribuições de pesquisa', isLoading: false });
+          return;
+        }
+
+        const surveyIds = assignments.map(a => a.surveyId);
+        query = query.in('id', surveyIds);
+      }
+      
+      const { data, error, status } = await query;
         
       if (error) {
         console.error('Erro ao buscar pesquisas:', error);
