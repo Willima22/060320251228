@@ -51,13 +51,8 @@ const ResearcherDashboardPage: React.FC = () => {
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('survey_assignments')
         .select(`
-          id,
-          survey_id,
-          researcher_id,
-          status,
-          assigned_at,
-          completed_at,
-          survey:surveys(*)
+          *,
+          survey:surveys!inner(*)
         `)
         .eq('researcher_id', user.id)
         .order('assigned_at', { ascending: false });
