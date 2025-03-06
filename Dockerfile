@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine as build
+FROM node:20-alpine as builder
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ RUN ls -la dist
 FROM nginx:alpine
 
 # Copiar os arquivos construídos
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copiar configuração do nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf

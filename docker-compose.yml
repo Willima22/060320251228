@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  survey-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: survey-app
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    networks:
+      - survey-network
+
+networks:
+  survey-network:
+    driver: bridge 
