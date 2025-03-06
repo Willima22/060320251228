@@ -13,7 +13,7 @@ interface UserState {
   updateUser: (id: string, user: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   getUser: (id: string) => Promise<void>;
-  assignSurveyToUser: (userId: string, surveyId: string) => Promise<void>;
+  assignSurveyToUser: (researcherId: string, surveyId: string) => Promise<void>;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -207,29 +207,89 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
   },
   
-  assignSurveyToUser: async (userId, surveyId) => {
+  assignSurveyToUser: async (researcherId: string, surveyId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const assignment = {
-        id: uuidv4(),
-        surveyId,
-        researcherId: userId,
-        status: 'pending',
-        assignedAt: new Date().toISOString(),
-      };
+      // Validar parâmetros
+      if (!researcherId || !surveyId) {
+        throw new Error('ID do pesquisador e da pesquisa são obrigatórios');
+      }
+
+      console.log('Atribuindo pesquisa:', { researcherId, surveyId });
       
-      const { error } = await supabase
-        .from('survey_assignments')
-        .insert(assignment);
-        
-      if (error) {
-        set({ error: error.message, isLoading: false });
-        return;
+      // Verificar se o pesquisador existe
+      const { data: researcher, error: researcherError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', researcherId)
+        .single();
+
+      if (researcherError || !researcher) {
+        console.error('Erro ao verificar pesquisador:', researcherError);
+        throw new Error('Pesquisador não encontrado');
+      }
+
+      if (researcher.role !== 'researcher') {
+        throw new Error('Usuário não é um pesquisador');
+      }
+
+      // Verificar se a pesquisa existe
+      const { data: survey, error: surveyError } = await supabase
+        .from('surveys')
+        .select('id')
+        .eq('id', surveyId)
+        .single();
+
+      if (surveyError || !survey) {
+        console.error('Erro ao verificar pesquisa:', surveyError);
+        throw new Error('Pesquisa não encontrada');
       }
       
+      // Verificar se já existe uma atribuição
+      const { data: existingAssignment, error: existingError } = await supabase
+        .from('survey_assignments')
+        .select('*')
+        .eq('researcher_id', researcherId)
+        .eq('survey_id', surveyId)
+        .single();
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        console.error('Erro ao verificar atribuição existente:', existingError);
+        throw existingError;
+      }
+
+      if (existingAssignment) {
+        console.log('Atribuição já existe');
+        set({ isLoading: false });
+        return;
+      }
+
+      // Criar nova atribuição
+      const { data, error } = await supabase
+        .from('survey_assignments')
+        .insert({
+          researcher_id: researcherId,
+          survey_id: surveyId,
+          status: 'pending',
+          assigned_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao criar atribuição:', error);
+        throw error;
+      }
+
+      console.log('Atribuição criada com sucesso:', data);
       set({ isLoading: false });
     } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+      console.error('Erro ao atribuir pesquisa:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário', 
+        isLoading: false 
+      });
+      throw err;
     }
   },
 }));

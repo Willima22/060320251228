@@ -59,15 +59,38 @@ const UsersPage: React.FC = () => {
   };
 
   const handleConfirmAssign = async () => {
-    if (!userToAssign || !selectedSurveyId) return;
+    if (!userToAssign || !selectedSurveyId) {
+      setError('Selecione um pesquisador e uma pesquisa para continuar.');
+      return;
+    }
 
     try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('Iniciando atribuição:', {
+        researcherId: userToAssign.id,
+        surveyId: selectedSurveyId
+      });
+      
       await assignSurveyToUser(userToAssign.id, selectedSurveyId);
+      console.log('Atribuição concluída com sucesso');
+      
+      // Mostrar mensagem de sucesso temporária
+      const successMessage = document.createElement('div');
+      successMessage.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg';
+      successMessage.textContent = 'Pesquisa atribuída com sucesso!';
+      document.body.appendChild(successMessage);
+      setTimeout(() => successMessage.remove(), 3000);
+      
       setAssignModalOpen(false);
       setUserToAssign(null);
       setSelectedSurveyId('');
     } catch (err) {
-      setError('Erro ao atribuir pesquisa.');
+      console.error('Erro na atribuição:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -173,10 +196,19 @@ const UsersPage: React.FC = () => {
 
       <Modal
         isOpen={assignModalOpen}
-        onClose={() => setAssignModalOpen(false)}
+        onClose={() => {
+          setAssignModalOpen(false);
+          setError(null);
+        }}
         title="Atribuir Pesquisa"
       >
         <div className="space-y-4">
+          {error && (
+            <Alert variant="error" className="mb-4">
+              {error}
+            </Alert>
+          )}
+          
           <p>
             Atribuir pesquisa para: <strong>{userToAssign?.name}</strong>
           </p>
@@ -202,15 +234,19 @@ const UsersPage: React.FC = () => {
           <div className="flex justify-end space-x-2 pt-4">
             <Button
               variant="outline"
-              onClick={() => setAssignModalOpen(false)}
+              onClick={() => {
+                setAssignModalOpen(false);
+                setError(null);
+              }}
             >
               Cancelar
             </Button>
             <Button
               onClick={handleConfirmAssign}
-              disabled={!selectedSurveyId}
+              disabled={!selectedSurveyId || isLoading}
+              isLoading={isLoading}
             >
-              Atribuir
+              {isLoading ? 'Atribuindo...' : 'Atribuir'}
             </Button>
           </div>
         </div>

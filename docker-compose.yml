@@ -8,10 +8,9 @@ services:
     container_name: survey-app
     restart: unless-stopped
     ports:
-      - "80:80"
-    environment:
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+      - "3000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - survey-network
 

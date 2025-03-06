@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { ClipboardList, CheckCircle, Clock } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
@@ -14,61 +14,93 @@ const ResearcherDashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchAssignments = async () => {
-      if (!user) {
-        console.log('Usuário não está logado');
+  const fetchAssignments = useCallback(async () => {
+    if (!user) {
+      console.log('Usuário não está logado');
+      return;
+    }
+
+    console.log('Buscando atribuições para o usuário:', user.id);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Buscar atribuições com detalhes da pesquisa
+      const { data, error } = await supabase
+        .from('survey_assignments')
+        .select(`
+          id,
+          survey_id,
+          researcher_id,
+          status,
+          assigned_at,
+          completed_at,
+          survey:surveys(*)
+        `)
+        .eq('researcher_id', user.id)
+        .order('assigned_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro do Supabase:', error);
+        throw error;
+      }
+
+      console.log('Dados retornados do Supabase:', data);
+
+      if (!data) {
+        console.log('Nenhum dado retornado');
+        setAssignments([]);
         return;
       }
 
-      console.log('Buscando atribuições para o usuário:', user.id);
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Fetch assignments with survey details in a single query
-        const { data, error } = await supabase
-          .from('survey_assignments')
-          .select(`
-            *,
-            survey:surveys(*)
-          `)
-          .eq('researcher_id', user.id);
-
-        if (error) {
-          console.error('Erro do Supabase:', error);
-          throw error;
+      // Transformar os dados para o formato esperado
+      const formattedAssignments = data.map(item => {
+        console.log('Processando item:', item);
+        if (!item.survey) {
+          console.warn('Item sem dados da pesquisa:', item);
+          return null;
         }
+        return {
+          ...item,
+          survey: item.survey as Survey
+        };
+      }).filter(Boolean) as (SurveyAssignment & { survey: Survey })[];
 
-        console.log('Dados retornados do Supabase:', data);
-
-        if (!data) {
-          console.log('Nenhum dado retornado');
-          setAssignments([]);
-          return;
-        }
-
-        // Transform the data to match our expected format
-        const formattedAssignments = data.map(item => {
-          console.log('Processando item:', item);
-          return {
-            ...item,
-            survey: item.survey as Survey
-          };
-        });
-
-        console.log('Atribuições formatadas:', formattedAssignments);
-        setAssignments(formattedAssignments);
-      } catch (err) {
-        console.error('Erro detalhado ao carregar pesquisas:', err);
-        setError('Erro ao carregar pesquisas atribuídas.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAssignments();
+      console.log('Atribuições formatadas:', formattedAssignments);
+      setAssignments(formattedAssignments);
+    } catch (err) {
+      console.error('Erro detalhado ao carregar pesquisas:', err);
+      setError('Erro ao carregar pesquisas atribuídas.');
+    } finally {
+      setIsLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => {
+    fetchAssignments();
+
+    // Inscrever para atualizações em tempo real
+    const assignmentsSubscription = supabase
+      .channel('survey_assignments_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'survey_assignments',
+          filter: `researcher_id=eq.${user?.id}`
+        },
+        () => {
+          console.log('Mudança detectada nas atribuições');
+          fetchAssignments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      assignmentsSubscription.unsubscribe();
+    };
+  }, [user, fetchAssignments]);
 
   if (isLoading) {
     return (
