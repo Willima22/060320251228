@@ -9,7 +9,7 @@ interface SurveyState {
   isLoading: boolean;
   error: string | null;
   fetchSurveys: () => Promise<void>;
-  createSurvey: (survey: Omit<Survey, 'id' | 'code' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  createSurvey: (survey: Omit<Survey, 'id' | 'code' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateSurvey: (id: string, survey: Partial<Survey>) => Promise<void>;
   deleteSurvey: (id: string) => Promise<void>;
   duplicateSurvey: (id: string) => Promise<void>;
