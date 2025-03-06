@@ -20,9 +20,9 @@ export interface Survey {
     type: 'Prefeito' | 'Prefeita' | 'Governador' | 'Governadora' | 'Presidente' | 'Presidenta';
     name: string;
   };
-  questions: any[];
-  created_at: string;
-  updated_at: string;
+  questions: Question[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Question {
@@ -58,4 +58,16 @@ export interface Report {
   parameters: Record<string, any>;
   createdAt: string;
   data: any;
+}
+
+export interface CreateSurveyDTO {
+  name: string;
+  city: string;
+  state: string;
+  date: string;
+  contractor: string;
+  current_manager: {
+    type: 'Prefeito' | 'Prefeita' | 'Governador' | 'Governadora' | 'Presidente' | 'Presidenta';
+    name: string;
+  };
 }

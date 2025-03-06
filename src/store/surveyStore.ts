@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Survey, Question } from '../types';
+import { Survey, Question, CreateSurveyDTO } from '../types';
 import { supabase } from '../lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -9,8 +9,8 @@ interface SurveyState {
   isLoading: boolean;
   error: string | null;
   fetchSurveys: () => Promise<void>;
-  createSurvey: (survey: Omit<Survey, 'id' | 'code' | 'created_at' | 'updated_at'>) => Promise<void>;
-  updateSurvey: (id: string, survey: Partial<Survey>) => Promise<void>;
+  createSurvey: (data: CreateSurveyDTO) => Promise<void>;
+  updateSurvey: (id: string, data: Partial<CreateSurveyDTO>) => Promise<void>;
   deleteSurvey: (id: string) => Promise<void>;
   duplicateSurvey: (id: string) => Promise<void>;
   getSurvey: (id: string) => Promise<void>;
@@ -114,119 +114,70 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
     }
   },
   
-  createSurvey: async (survey) => {
+  createSurvey: async (data) => {
     set({ isLoading: true, error: null });
     try {
-      console.log('Iniciando criação de pesquisa...', survey);
-      
-      // Verificar autenticação
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) {
-        console.error('Erro ao verificar sessão:', sessionError);
-        set({ error: 'Erro ao verificar autenticação', isLoading: false });
-        return;
-      }
-      
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        console.error('Usuário não está autenticado');
-        set({ error: 'Usuário não está autenticado', isLoading: false });
-        return;
+        throw new Error('Usuário não está autenticado');
       }
 
-      console.log('Usuário autenticado:', session.user.email);
-      
-      // Verificar se o usuário existe na tabela users e é admin
-      const { data: userData, error: userError } = await supabase
+      const { data: user } = await supabase
         .from('users')
-        .select('*')
+        .select('role')
         .eq('email', session.user.email)
         .single();
-        
-      if (userError) {
-        console.error('Erro ao buscar perfil do usuário:', userError);
-        set({ error: 'Erro ao buscar perfil do usuário', isLoading: false });
-        return;
-      }
-      
-      if (!userData) {
-        console.error('Usuário não encontrado na tabela users');
-        set({ error: 'Usuário não encontrado', isLoading: false });
-        return;
+
+      if (!user || user.role !== 'admin') {
+        throw new Error('Você não tem permissão para criar pesquisas');
       }
 
-      console.log('Perfil do usuário:', userData);
-
-      if (userData.role !== 'admin') {
-        console.error('Usuário não tem permissão para criar pesquisas');
-        set({ error: 'Você não tem permissão para criar pesquisas', isLoading: false });
-        return;
-      }
-
-      console.log('Gerando código da pesquisa...');
-      const code = generateSurveyCode(survey.city, survey.state);
-      
-      // Garantir que currentManager seja um objeto válido
-      const currentManager = typeof survey.currentManager === 'string' 
-        ? JSON.parse(survey.currentManager)
-        : survey.currentManager;
+      const code = generateSurveyCode(data.city, data.state);
       
       const newSurvey = {
-        ...survey,
         id: uuidv4(),
+        ...data,
         code,
-        current_manager: currentManager,
         questions: [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       };
-      
-      console.log('Tentando criar pesquisa:', newSurvey);
-      
-      // Primeiro, inserir a pesquisa
-      const { error: insertError, status } = await supabase
+
+      const { error: insertError } = await supabase
         .from('surveys')
         .insert([newSurvey]);
-        
-      if (insertError) {
-        console.error('Erro ao criar pesquisa:', insertError);
-        console.error('Status da resposta:', status);
-        set({ error: `Erro ao criar pesquisa: ${insertError.message} (Status: ${status})`, isLoading: false });
-        return;
-      }
 
-      // Depois, buscar a pesquisa criada
-      const { data, error: fetchError } = await supabase
+      if (insertError) throw insertError;
+
+      const { data: createdSurvey, error: fetchError } = await supabase
         .from('surveys')
         .select('*')
         .eq('id', newSurvey.id)
         .single();
-        
-      if (fetchError || !data) {
-        console.error('Erro ao buscar pesquisa criada:', fetchError);
-        set({ error: 'Erro ao buscar pesquisa criada', isLoading: false });
-        return;
+
+      if (fetchError || !createdSurvey) {
+        throw new Error('Erro ao buscar pesquisa criada');
       }
-      
-      console.log('Pesquisa criada com sucesso:', data);
-      set(state => ({ 
-        surveys: [data, ...state.surveys],
-        currentSurvey: data,
-        isLoading: false 
+
+      set(state => ({
+        surveys: [createdSurvey, ...state.surveys],
+        currentSurvey: createdSurvey,
+        isLoading: false,
       }));
-    } catch (err) {
-      console.error('Erro inesperado ao criar pesquisa:', err);
-      set({ error: 'Ocorreu um erro inesperado ao criar a pesquisa', isLoading: false });
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Erro ao criar pesquisa',
+        isLoading: false,
+      });
+      throw error;
     }
   },
   
-  updateSurvey: async (id, surveyData) => {
+  updateSurvey: async (id, data) => {
     set({ isLoading: true, error: null });
     try {
       const { error } = await supabase
         .from('surveys')
         .update({
-          ...surveyData,
+          ...data,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
@@ -239,11 +190,11 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       set(state => ({
         surveys: state.surveys.map(survey => 
           survey.id === id 
-            ? { ...survey, ...surveyData, updated_at: new Date().toISOString() } 
+            ? { ...survey, ...data, updated_at: new Date().toISOString() } 
             : survey
         ),
         currentSurvey: state.currentSurvey?.id === id 
-          ? { ...state.currentSurvey, ...surveyData, updated_at: new Date().toISOString() } 
+          ? { ...state.currentSurvey, ...data, updated_at: new Date().toISOString() } 
           : state.currentSurvey,
         isLoading: false
       }));

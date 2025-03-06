@@ -2,23 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useSurveyStore } from '../../store/surveyStore';
+import { CreateSurveyDTO } from '../../types';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Alert from '../../components/ui/Alert';
 import { Card, CardContent, CardHeader, CardFooter } from '../../components/ui/Card';
-
-interface SurveyFormData {
-  name: string;
-  city: string;
-  state: string;
-  date: string;
-  contractor: string;
-  current_manager: {
-    type: 'Prefeito' | 'Prefeita' | 'Governador' | 'Governadora' | 'Presidente' | 'Presidenta';
-    name: string;
-  };
-}
 
 const SurveyFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -35,7 +24,7 @@ const SurveyFormPage: React.FC = () => {
     reset,
     setValue,
     watch,
-  } = useForm<SurveyFormData>({
+  } = useForm<CreateSurveyDTO>({
     defaultValues: {
       current_manager: {
         type: 'Prefeito',
@@ -69,44 +58,25 @@ const SurveyFormPage: React.FC = () => {
         name: currentSurvey.name,
         city: currentSurvey.city,
         state: currentSurvey.state,
-        date: currentSurvey.date.split('T')[0], // Format date for input
+        date: currentSurvey.date.split('T')[0],
         contractor: currentSurvey.contractor,
         current_manager: currentSurvey.current_manager,
       });
     }
   }, [currentSurvey, reset, isEditMode]);
 
-  const onSubmit = async (data: SurveyFormData) => {
+  const onSubmit = async (data: CreateSurveyDTO) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      console.log('Enviando dados do formulário:', data);
-      
-      // Garantir que current_manager seja um objeto válido
-      const surveyData = {
-        ...data,
-        current_manager: {
-          type: data.current_manager.type,
-          name: data.current_manager.name,
-        },
-      };
-      
-      console.log('Dados formatados para envio:', surveyData);
-      
       if (isEditMode && id) {
-        console.log('Atualizando pesquisa existente:', id);
-        await updateSurvey(id, surveyData);
+        await updateSurvey(id, data);
       } else {
-        console.log('Criando nova pesquisa');
-        await createSurvey(surveyData);
+        await createSurvey(data);
       }
 
-      // Só navega se não houver erro
-      if (!error) {
-        console.log('Operação concluída com sucesso, redirecionando...');
-        navigate('/surveys');
-      }
+      navigate('/surveys');
     } catch (err) {
       console.error('Erro ao salvar pesquisa:', err);
       setError('Erro ao salvar pesquisa. Por favor, tente novamente.');
