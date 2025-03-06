@@ -16,8 +16,12 @@ const ResearcherDashboardPage: React.FC = () => {
 
   useEffect(() => {
     const fetchAssignments = async () => {
-      if (!user) return;
+      if (!user) {
+        console.log('Usuário não está logado');
+        return;
+      }
 
+      console.log('Buscando atribuições para o usuário:', user.id);
       setIsLoading(true);
       setError(null);
 
@@ -32,23 +36,31 @@ const ResearcherDashboardPage: React.FC = () => {
           .eq('researcher_id', user.id);
 
         if (error) {
+          console.error('Erro do Supabase:', error);
           throw error;
         }
 
+        console.log('Dados retornados do Supabase:', data);
+
         if (!data) {
+          console.log('Nenhum dado retornado');
           setAssignments([]);
           return;
         }
 
         // Transform the data to match our expected format
-        const formattedAssignments = data.map(item => ({
-          ...item,
-          survey: item.survey as Survey
-        }));
+        const formattedAssignments = data.map(item => {
+          console.log('Processando item:', item);
+          return {
+            ...item,
+            survey: item.survey as Survey
+          };
+        });
 
+        console.log('Atribuições formatadas:', formattedAssignments);
         setAssignments(formattedAssignments);
       } catch (err) {
-        console.error('Erro ao carregar pesquisas:', err);
+        console.error('Erro detalhado ao carregar pesquisas:', err);
         setError('Erro ao carregar pesquisas atribuídas.');
       } finally {
         setIsLoading(false);

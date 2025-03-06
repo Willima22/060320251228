@@ -11,6 +11,8 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  setUser: (user: User | null) => void;
+  checkUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -111,6 +113,40 @@ export const useAuthStore = create<AuthState>()(
           }
         } catch (err) {
           set({ user: null, isAuthenticated: false, isLoading: false });
+        }
+      },
+      
+      setUser: (user) => set({ user }),
+      
+      checkUser: async () => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          console.log('Usuário autenticado:', user);
+
+          if (user) {
+            // Buscar dados adicionais do usuário
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', user.id)
+              .single();
+
+            console.log('Dados do usuário:', userData);
+            console.log('Erro ao buscar usuário:', userError);
+
+            if (userData) {
+              set({ user: { ...user, ...userData } });
+            } else {
+              console.log('Usuário não encontrado na tabela users');
+              set({ user: null });
+            }
+          } else {
+            console.log('Nenhum usuário autenticado');
+            set({ user: null });
+          }
+        } catch (error) {
+          console.error('Erro ao verificar usuário:', error);
+          set({ user: null });
         }
       }
     }),
