@@ -14,6 +14,9 @@ COPY . .
 
 # Construir a aplicação com modo de produção
 ENV NODE_ENV=production
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+
 RUN npm run build
 
 # Verificar se o build foi bem sucedido
@@ -43,8 +46,8 @@ RUN chown -R nginx:nginx /var/log/nginx && \
 USER nginx
 
 # Expor a porta que o Coolify fornecerá
-ENV PORT=80
-EXPOSE $PORT
+ENV PORT=8000
+EXPOSE 8000
 
 # Iniciar nginx com a porta dinâmica
 CMD sed -i -e 's/$PORT/'"$PORT"'/g' /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;' 
