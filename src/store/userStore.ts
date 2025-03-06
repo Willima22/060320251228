@@ -264,16 +264,18 @@ export const useUserStore = create<UserState>((set, get) => ({
         return;
       }
 
+      const now = new Date().toISOString();
+      
       // Criar nova atribuição
       const { data, error } = await supabase
         .from('survey_assignments')
-        .insert({
+        .insert([{
           researcher_id: researcherId,
           survey_id: surveyId,
           status: 'pending',
-          assigned_at: new Date().toISOString()
-        })
-        .select()
+          assigned_at: now
+        }])
+        .select('*')
         .single();
 
       if (error) {

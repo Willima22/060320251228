@@ -78,7 +78,7 @@ const UsersPage: React.FC = () => {
       
       // Mostrar mensagem de sucesso temporária
       const successMessage = document.createElement('div');
-      successMessage.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg';
+      successMessage.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
       successMessage.textContent = 'Pesquisa atribuída com sucesso!';
       document.body.appendChild(successMessage);
       setTimeout(() => successMessage.remove(), 3000);
@@ -87,8 +87,16 @@ const UsersPage: React.FC = () => {
       setUserToAssign(null);
       setSelectedSurveyId('');
     } catch (err) {
-      console.error('Erro na atribuição:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário.');
+      console.error('Erro detalhado na atribuição:', err);
+      let errorMessage = 'Erro ao atribuir pesquisa ao usuário.';
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'object' && err !== null) {
+        errorMessage = JSON.stringify(err);
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
