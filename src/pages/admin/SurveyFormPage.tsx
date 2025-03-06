@@ -83,10 +83,23 @@ const SurveyFormPage: React.FC = () => {
     try {
       console.log('Enviando dados do formulário:', data);
       
+      // Garantir que currentManager seja um objeto válido
+      const surveyData = {
+        ...data,
+        currentManager: {
+          type: data.currentManager.type,
+          name: data.currentManager.name,
+        },
+      };
+      
+      console.log('Dados formatados para envio:', surveyData);
+      
       if (isEditMode && id) {
-        await updateSurvey(id, data);
+        console.log('Atualizando pesquisa existente:', id);
+        await updateSurvey(id, surveyData);
       } else {
-        await createSurvey(data);
+        console.log('Criando nova pesquisa');
+        await createSurvey(surveyData);
       }
 
       // Só navega se não houver erro

@@ -21,8 +21,8 @@ export interface Survey {
     name: string;
   };
   questions: Question[];
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Question {

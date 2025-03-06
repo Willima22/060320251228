@@ -155,6 +155,8 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         return;
       }
 
+      console.log('Perfil do usuário:', userData);
+
       if (userData.role !== 'admin') {
         console.error('Usuário não tem permissão para criar pesquisas');
         set({ error: 'Você não tem permissão para criar pesquisas', isLoading: false });
@@ -164,18 +166,24 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       console.log('Gerando código da pesquisa...');
       const code = generateSurveyCode(survey.city, survey.state);
       
+      // Garantir que currentManager seja um objeto válido
+      const currentManager = typeof survey.currentManager === 'string' 
+        ? JSON.parse(survey.currentManager)
+        : survey.currentManager;
+      
       const newSurvey = {
         ...survey,
         id: uuidv4(),
         code,
+        currentManager,
         questions: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       
       console.log('Tentando criar pesquisa:', newSurvey);
       
-      const { data, error } = await supabase
+      const { data, error, status } = await supabase
         .from('surveys')
         .insert([newSurvey])
         .select()
@@ -183,7 +191,8 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         
       if (error) {
         console.error('Erro ao criar pesquisa:', error);
-        set({ error: `Erro ao criar pesquisa: ${error.message}`, isLoading: false });
+        console.error('Status da resposta:', status);
+        set({ error: `Erro ao criar pesquisa: ${error.message} (Status: ${status})`, isLoading: false });
         return;
       }
       
@@ -212,7 +221,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         .from('surveys')
         .update({
           ...surveyData,
-          updatedAt: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq('id', id);
         
@@ -224,11 +233,11 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       set(state => ({
         surveys: state.surveys.map(survey => 
           survey.id === id 
-            ? { ...survey, ...surveyData, updatedAt: new Date().toISOString() } 
+            ? { ...survey, ...surveyData, updated_at: new Date().toISOString() } 
             : survey
         ),
         currentSurvey: state.currentSurvey?.id === id 
-          ? { ...state.currentSurvey, ...surveyData, updatedAt: new Date().toISOString() } 
+          ? { ...state.currentSurvey, ...surveyData, updated_at: new Date().toISOString() } 
           : state.currentSurvey,
         isLoading: false
       }));
@@ -275,8 +284,8 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         id: uuidv4(),
         name: `${surveyToDuplicate.name} (Copy)`,
         code: generateSurveyCode(surveyToDuplicate.city, surveyToDuplicate.state),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       
       const { error } = await supabase
@@ -338,7 +347,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         .from('surveys')
         .update({
           questions: updatedQuestions,
-          updatedAt: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq('id', surveyId);
         
@@ -349,11 +358,11 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       
       set(state => ({
         currentSurvey: state.currentSurvey 
-          ? { ...state.currentSurvey, questions: updatedQuestions, updatedAt: new Date().toISOString() } 
+          ? { ...state.currentSurvey, questions: updatedQuestions, updated_at: new Date().toISOString() } 
           : null,
         surveys: state.surveys.map(s => 
           s.id === surveyId 
-            ? { ...s, questions: updatedQuestions, updatedAt: new Date().toISOString() } 
+            ? { ...s, questions: updatedQuestions, updated_at: new Date().toISOString() } 
             : s
         ),
         isLoading: false
@@ -381,7 +390,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         .from('surveys')
         .update({
           questions: updatedQuestions,
-          updatedAt: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq('id', surveyId);
         
@@ -392,11 +401,11 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       
       set(state => ({
         currentSurvey: state.currentSurvey 
-          ? { ...state.currentSurvey, questions: updatedQuestions, updatedAt: new Date().toISOString() } 
+          ? { ...state.currentSurvey, questions: updatedQuestions, updated_at: new Date().toISOString() } 
           : null,
         surveys: state.surveys.map(s => 
           s.id === surveyId 
-            ? { ...s, questions: updatedQuestions, updatedAt: new Date().toISOString() } 
+            ? { ...s, questions: updatedQuestions, updated_at: new Date().toISOString() } 
             : s
         ),
         isLoading: false
@@ -422,7 +431,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
         .from('surveys')
         .update({
           questions: updatedQuestions,
-          updatedAt: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq('id', surveyId);
         
@@ -433,11 +442,11 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       
       set(state => ({
         currentSurvey: state.currentSurvey 
-          ? { ...state.currentSurvey, questions: updatedQuestions, updatedAt: new Date().toISOString() } 
+          ? { ...state.currentSurvey, questions: updatedQuestions, updated_at: new Date().toISOString() } 
           : null,
         surveys: state.surveys.map(s => 
           s.id === surveyId 
-            ? { ...s, questions: updatedQuestions, updatedAt: new Date().toISOString() } 
+            ? { ...s, questions: updatedQuestions, updated_at: new Date().toISOString() } 
             : s
         ),
         isLoading: false
