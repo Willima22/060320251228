@@ -16,11 +16,11 @@ export interface Survey {
   date: string;
   contractor: string;
   code: string;
-  currentManager: {
+  current_manager: {
     type: 'Prefeito' | 'Prefeita' | 'Governador' | 'Governadora' | 'Presidente' | 'Presidenta';
     name: string;
   };
-  questions: Question[];
+  questions: any[];
   created_at: string;
   updated_at: string;
 }

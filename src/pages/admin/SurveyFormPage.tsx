@@ -14,7 +14,7 @@ interface SurveyFormData {
   state: string;
   date: string;
   contractor: string;
-  currentManager: {
+  current_manager: {
     type: 'Prefeito' | 'Prefeita' | 'Governador' | 'Governadora' | 'Presidente' | 'Presidenta';
     name: string;
   };
@@ -37,14 +37,14 @@ const SurveyFormPage: React.FC = () => {
     watch,
   } = useForm<SurveyFormData>({
     defaultValues: {
-      currentManager: {
+      current_manager: {
         type: 'Prefeito',
         name: '',
       },
     },
   });
 
-  const managerType = watch('currentManager.type');
+  const managerType = watch('current_manager.type');
 
   useEffect(() => {
     if (isEditMode && id) {
@@ -71,7 +71,7 @@ const SurveyFormPage: React.FC = () => {
         state: currentSurvey.state,
         date: currentSurvey.date.split('T')[0], // Format date for input
         contractor: currentSurvey.contractor,
-        currentManager: currentSurvey.currentManager,
+        current_manager: currentSurvey.current_manager,
       });
     }
   }, [currentSurvey, reset, isEditMode]);
@@ -83,12 +83,12 @@ const SurveyFormPage: React.FC = () => {
     try {
       console.log('Enviando dados do formulário:', data);
       
-      // Garantir que currentManager seja um objeto válido
+      // Garantir que current_manager seja um objeto válido
       const surveyData = {
         ...data,
-        currentManager: {
-          type: data.currentManager.type,
-          name: data.currentManager.name,
+        current_manager: {
+          type: data.current_manager.type,
+          name: data.current_manager.name,
         },
       };
       
@@ -208,8 +208,8 @@ const SurveyFormPage: React.FC = () => {
                   <Select
                     label="Tipo de Gestor"
                     options={managerOptions}
-                    error={errors.currentManager?.type?.message}
-                    {...register('currentManager.type', {
+                    error={errors.current_manager?.type?.message}
+                    {...register('current_manager.type', {
                       required: 'Tipo de gestor é obrigatório',
                     })}
                   />
@@ -217,8 +217,8 @@ const SurveyFormPage: React.FC = () => {
                   <Input
                     label={`Nome do ${managerType}`}
                     placeholder={`Digite o nome do ${managerType.toLowerCase()}`}
-                    error={errors.currentManager?.name?.message}
-                    {...register('currentManager.name', {
+                    error={errors.current_manager?.name?.message}
+                    {...register('current_manager.name', {
                       required: 'Nome do gestor é obrigatório',
                     })}
                   />
