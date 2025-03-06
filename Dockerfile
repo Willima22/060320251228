@@ -12,8 +12,12 @@ RUN npm install
 # Copiar código fonte
 COPY . .
 
-# Construir a aplicação
+# Construir a aplicação com modo de produção
+ENV NODE_ENV=production
 RUN npm run build
+
+# Verificar se o build foi bem sucedido
+RUN ls -la dist
 
 # Production stage
 FROM nginx:alpine
@@ -31,6 +35,7 @@ RUN mkdir -p /var/log/nginx
 RUN chown -R nginx:nginx /var/log/nginx && \
     chown -R nginx:nginx /var/cache/nginx && \
     chown -R nginx:nginx /etc/nginx/conf.d && \
+    chown -R nginx:nginx /usr/share/nginx/html && \
     touch /var/run/nginx.pid && \
     chown -R nginx:nginx /var/run/nginx.pid
 
