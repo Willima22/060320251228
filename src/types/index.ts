@@ -44,11 +44,11 @@ export interface Answer {
 
 export interface SurveyAssignment {
   id: string;
-  surveyId: string;
-  researcherId: string;
+  survey_id: string;
+  researcher_id: string;
   status: 'pending' | 'in_progress' | 'completed';
-  assignedAt: string;
-  completedAt?: string;
+  assigned_at: string;
+  completed_at?: string;
 }
 
 export interface Report {

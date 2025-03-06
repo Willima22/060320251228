@@ -77,8 +77,8 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
       if (userData.role === 'researcher') {
         const { data: assignments, error: assignmentError } = await supabase
           .from('survey_assignments')
-          .select('surveyId')
-          .eq('researcherId', userData.id);
+          .select('survey_id')
+          .eq('researcher_id', userData.id);
 
         if (assignmentError) {
           console.error('Erro ao buscar atribuições:', assignmentError);
@@ -86,7 +86,7 @@ export const useSurveyStore = create<SurveyState>((set, get) => ({
           return;
         }
 
-        const surveyIds = assignments.map(a => a.surveyId);
+        const surveyIds = assignments.map(a => a.survey_id);
         query = query.in('id', surveyIds);
       }
       

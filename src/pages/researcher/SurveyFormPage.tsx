@@ -113,10 +113,10 @@ const SurveyFormPage: React.FC = () => {
         .from('survey_assignments')
         .update({
           status: 'completed',
-          completedAt: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
         })
-        .eq('surveyId', id)
-        .eq('researcherId', user.id);
+        .eq('survey_id', id)
+        .eq('researcher_id', user.id);
       
       setSuccess(true);
       
