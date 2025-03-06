@@ -44,10 +44,12 @@ export const useUserStore = create<UserState>((set, get) => ({
   createUser: async (userData) => {
     set({ isLoading: true, error: null });
     try {
+      console.log('Iniciando criação de usuário...', userData);
+      
       // First create the auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
-        password: userData.password || 'tempPassword123', // Temporary password
+        password: userData.password || 'tempPassword123',
         options: {
           data: {
             name: userData.name,
@@ -56,41 +58,59 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
       });
       
+      console.log('Resposta da criação do auth user:', authData);
+      
       if (authError) {
-        set({ error: authError.message, isLoading: false });
-        return;
+        console.error('Erro ao criar auth user:', authError);
+        throw new Error(authError.message);
       }
       
       if (!authData.user) {
-        set({ error: 'Failed to create user', isLoading: false });
-        return;
+        throw new Error('Falha ao criar usuário na autenticação');
       }
+
+      console.log('Auth user criado com sucesso:', authData.user);
       
       // Then create the user profile
-      const newUser: User = {
+      const userProfile = {
         id: authData.user.id,
         name: userData.name,
         email: userData.email,
         cpf: userData.cpf,
         role: userData.role,
-        firstAccess: true,
+        first_access: true
       };
+
+      console.log('Dados do perfil para criação:', userProfile);
       
-      const { error } = await supabase
+      const { data: createdUser, error: profileError } = await supabase
         .from('users')
-        .insert(newUser);
+        .insert(userProfile)
+        .select()
+        .single();
         
-      if (error) {
-        set({ error: error.message, isLoading: false });
-        return;
+      if (profileError) {
+        console.error('Erro ao criar perfil:', profileError);
+        throw new Error(profileError.message);
       }
+
+      if (!createdUser) {
+        throw new Error('Erro ao criar perfil: nenhum dado retornado');
+      }
+
+      console.log('Usuário criado com sucesso:', createdUser);
       
       set(state => ({ 
-        users: [...state.users, newUser],
+        users: [...state.users, createdUser],
         isLoading: false 
       }));
-    } catch (err) {
-      set({ error: 'An unexpected error occurred', isLoading: false });
+    } catch (error) {
+      console.error('Erro completo:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Erro ao criar usuário',
+        isLoading: false 
+      });
+      throw error;
     }
   },
   
