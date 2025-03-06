@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ClipboardList, CheckCircle, Clock } from 'lucide-react';
+import { ClipboardList, CheckCircle, Clock, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
@@ -34,10 +34,12 @@ const ResearcherDashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchAssignments = useCallback(async () => {
     if (!user) {
       console.log('❌ Usuário não está logado');
+      setError('Usuário não está logado. Por favor, faça login novamente.');
       return;
     }
 
@@ -51,26 +53,10 @@ const ResearcherDashboardPage: React.FC = () => {
     
     setIsLoading(true);
     setError(null);
+    setIsRefreshing(true);
 
     try {
-      // Primeiro, verifica se o usuário existe e tem papel de pesquisador
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id, role')
-        .eq('id', user.id)
-        .single();
-
-      if (userError) {
-        throw new Error(`Erro ao verificar usuário: ${userError.message}`);
-      }
-
-      if (!userData || userData.role !== 'researcher') {
-        throw new Error('Usuário não tem permissão de pesquisador');
-      }
-
-      console.log('👤 Usuário verificado:', userData);
-
-      // Busca as atribuições com left join para as pesquisas
+      // Otimizando a query para buscar apenas os campos necessários
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('survey_assignments')
         .select(`
@@ -87,12 +73,10 @@ const ResearcherDashboardPage: React.FC = () => {
             state,
             date,
             contractor,
-            code,
-            current_manager
+            code
           )
         `)
         .eq('researcher_id', user.id)
-        .is('deleted_at', null) // Garante que não pegue registros deletados
         .order('assigned_at', { ascending: false });
 
       if (assignmentsError) {
@@ -111,15 +95,14 @@ const ResearcherDashboardPage: React.FC = () => {
         return;
       }
 
-      console.log('📊 Dados recebidos:', {
+      console.log('📊 Dados brutos recebidos:', {
         total: assignmentsData.length,
-        assignments: assignmentsData.map(a => ({
-          id: a.id,
-          survey_id: a.survey_id,
-          status: a.status,
-          has_survey: !!a.survey,
-          assigned_at: new Date(a.assigned_at).toLocaleString()
-        }))
+        withSurvey: assignmentsData.filter(a => a.survey).length,
+        withoutSurvey: assignmentsData.filter(a => !a.survey).length,
+        statuses: assignmentsData.reduce((acc, curr) => {
+          acc[curr.status] = (acc[curr.status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
       });
 
       // Filtra atribuições válidas e ordena por data
@@ -127,7 +110,7 @@ const ResearcherDashboardPage: React.FC = () => {
         .filter(assignment => {
           const isValid = assignment.survey !== null;
           if (!isValid) {
-            console.warn('⚠️ Atribuição inválida encontrada:', {
+            console.warn('⚠️ Atribuição sem pesquisa encontrada:', {
               id: assignment.id,
               survey_id: assignment.survey_id,
               assigned_at: new Date(assignment.assigned_at).toLocaleString()
@@ -137,30 +120,32 @@ const ResearcherDashboardPage: React.FC = () => {
         })
         .sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime());
 
-      console.log('✅ Atribuições válidas:', {
+      console.log('✅ Atribuições válidas processadas:', {
         total: validAssignments.length,
         assignments: validAssignments.map(a => ({
           id: a.id,
-          survey_name: a.survey.name,
+          survey_id: a.survey_id,
+          survey_name: a.survey?.name,
           status: a.status,
           assigned_at: new Date(a.assigned_at).toLocaleString(),
-          city: a.survey.city,
-          state: a.survey.state
+          city: a.survey?.city,
+          state: a.survey?.state
         }))
       });
 
-      if (validAssignments.length === 0) {
-        console.log('ℹ️ Nenhuma atribuição válida encontrada');
-      }
-
       setAssignments(validAssignments);
       setLastFetch(new Date());
+      
+      if (validAssignments.length === 0) {
+        setError('Nenhuma pesquisa atribuída encontrada. Se isso parecer incorreto, clique em "Testar Permissões do Supabase".');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       console.error('❌ Erro ao carregar pesquisas:', errorMessage);
       setError(`Erro ao carregar pesquisas: ${errorMessage}`);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [user, lastFetch]);
 
@@ -397,17 +382,17 @@ const ResearcherDashboardPage: React.FC = () => {
 
   // Renderiza o card de uma atribuição
   const renderAssignmentCard = (assignment: AssignmentData) => (
-    <Card key={assignment.id}>
+    <Card key={assignment.id} className="hover:shadow-lg transition-shadow duration-200">
       <CardContent className="p-6">
         <div className="flex justify-between items-center">
           <div className="space-y-2">
             <h3 className="text-lg font-medium">
-              {assignment.survey.name || 'Nome não disponível'}
+              {assignment.survey?.name || 'Nome não disponível'}
             </h3>
             <p className="text-sm text-gray-500">
-              {assignment.survey.city || 'Cidade não disponível'}, {assignment.survey.state || 'Estado não disponível'}
+              {assignment.survey?.city || 'Cidade não disponível'}, {assignment.survey?.state || 'Estado não disponível'}
             </p>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-wrap">
               <span
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(
                   assignment.status
@@ -416,13 +401,15 @@ const ResearcherDashboardPage: React.FC = () => {
                 {getStatusText(assignment.status)}
               </span>
               {assignment.assigned_at && (
-                <span className="text-xs text-gray-500">
-                  Atribuída em: {new Date(assignment.assigned_at).toLocaleDateString()}
+                <span className="text-xs text-gray-500 flex items-center">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Atribuída: {new Date(assignment.assigned_at).toLocaleDateString()}
                 </span>
               )}
               {assignment.completed_at && (
-                <span className="text-xs text-gray-500">
-                  Concluída em: {new Date(assignment.completed_at).toLocaleDateString()}
+                <span className="text-xs text-gray-500 flex items-center">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Concluída: {new Date(assignment.completed_at).toLocaleDateString()}
                 </span>
               )}
             </div>
@@ -460,11 +447,20 @@ const ResearcherDashboardPage: React.FC = () => {
               console.log('🔄 Atualizando manualmente...');
               fetchAssignments();
             }}
+            disabled={isRefreshing}
+            className="flex items-center"
           >
-            Atualizar
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Atualizando...' : 'Atualizar'}
           </Button>
         </div>
       </div>
+
+      {lastFetch && (
+        <p className="text-sm text-gray-500">
+          Última atualização: {lastFetch.toLocaleString()}
+        </p>
+      )}
 
       {error && (
         <Alert variant="error" className="mb-4">
@@ -474,6 +470,7 @@ const ResearcherDashboardPage: React.FC = () => {
             size="sm"
             onClick={fetchAssignments}
             className="mt-2"
+            disabled={isRefreshing}
           >
             Tentar Novamente
           </Button>
@@ -488,7 +485,7 @@ const ResearcherDashboardPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <p className="text-gray-500 text-center">
-              Nenhuma pesquisa atribuída ainda.
+              Nenhuma pesquisa atribuída ainda. Se você acredita que deveria ver pesquisas aqui, por favor clique no botão "Testar Permissões do Supabase" acima.
             </p>
           </CardContent>
         </Card>
