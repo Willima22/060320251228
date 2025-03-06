@@ -56,17 +56,12 @@ const ResearcherDashboardPage: React.FC = () => {
     setIsRefreshing(true);
 
     try {
-      // Otimizando a query para buscar apenas os campos necessários
+      // Busca as atribuições com join
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('survey_assignments')
         .select(`
-          id,
-          survey_id,
-          researcher_id,
-          status,
-          assigned_at,
-          completed_at,
-          survey:surveys!left (
+          *,
+          survey:surveys (
             id,
             name,
             city,
@@ -80,32 +75,23 @@ const ResearcherDashboardPage: React.FC = () => {
         .order('assigned_at', { ascending: false });
 
       if (assignmentsError) {
-        console.error('❌ Erro detalhado:', {
-          message: assignmentsError.message,
-          details: assignmentsError.details,
-          hint: assignmentsError.hint,
-          code: assignmentsError.code
-        });
+        console.error('❌ Erro ao buscar atribuições:', assignmentsError);
         throw new Error(`Erro ao buscar atribuições: ${assignmentsError.message}`);
       }
 
-      if (!assignmentsData) {
-        console.warn('⚠️ Nenhum dado retornado na busca de atribuições');
+      console.log('📊 Dados brutos recebidos:', {
+        total: assignmentsData?.length || 0,
+        data: assignmentsData
+      });
+
+      if (!assignmentsData?.length) {
+        console.log('ℹ️ Nenhuma atribuição encontrada');
         setAssignments([]);
+        setError('Nenhuma pesquisa atribuída encontrada.');
         return;
       }
 
-      console.log('📊 Dados brutos recebidos:', {
-        total: assignmentsData.length,
-        withSurvey: assignmentsData.filter(a => a.survey).length,
-        withoutSurvey: assignmentsData.filter(a => !a.survey).length,
-        statuses: assignmentsData.reduce((acc, curr) => {
-          acc[curr.status] = (acc[curr.status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>)
-      });
-
-      // Filtra atribuições válidas e ordena por data
+      // Filtra atribuições válidas
       const validAssignments = assignmentsData
         .filter(assignment => {
           const isValid = assignment.survey !== null;
@@ -117,8 +103,7 @@ const ResearcherDashboardPage: React.FC = () => {
             });
           }
           return isValid;
-        })
-        .sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime());
+        });
 
       console.log('✅ Atribuições válidas processadas:', {
         total: validAssignments.length,
@@ -137,7 +122,7 @@ const ResearcherDashboardPage: React.FC = () => {
       setLastFetch(new Date());
       
       if (validAssignments.length === 0) {
-        setError('Nenhuma pesquisa atribuída encontrada. Se isso parecer incorreto, clique em "Testar Permissões do Supabase".');
+        setError('Nenhuma pesquisa válida encontrada. Por favor, contate o administrador.');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
