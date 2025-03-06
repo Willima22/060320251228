@@ -55,7 +55,7 @@ export const useUserStore = create<UserState>((set, get) => ({
             name: userData.name,
             role: userData.role,
           },
-          emailRedirectTo: `${window.location.origin}/login`
+          emailRedirectTo: `${window.location.origin}/?confirmation=true`
         }
       });
       
@@ -71,18 +71,6 @@ export const useUserStore = create<UserState>((set, get) => ({
       }
 
       console.log('Auth user criado com sucesso:', authData.user);
-
-      // Confirmar email automaticamente
-      const { error: confirmError } = await supabase.auth.admin.updateUserById(
-        authData.user.id,
-        { email_confirm: true }
-      );
-
-      if (confirmError) {
-        console.error('Erro ao confirmar email:', confirmError);
-      } else {
-        console.log('Email confirmado automaticamente');
-      }
       
       // Then create the user profile
       const userProfile = {

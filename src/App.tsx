@@ -5,11 +5,13 @@ import { supabase } from './lib/supabase';
 
 // Layout
 import Layout from './components/layout/Layout';
+import RootRoute from './components/RootRoute';
 
 // Auth pages
 import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
+import EmailConfirmationPage from './pages/auth/EmailConfirmationPage';
 import WelcomePage from './pages/WelcomePage';
 
 // Admin pages
@@ -71,10 +73,8 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Welcome page if no admin exists */}
-        {hasAdminUser === false && (
-          <Route path="/" element={<WelcomePage />} />
-        )}
+        {/* Root path handling */}
+        <Route path="/" element={<RootRoute hasAdminUser={hasAdminUser} />} />
         
         {/* Public routes */}
         <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/dashboard" />} />
