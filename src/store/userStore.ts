@@ -207,16 +207,30 @@ export const useUserStore = create<UserState>((set, get) => ({
         throw new Error('ID do pesquisador e da pesquisa são obrigatórios');
       }
 
+      console.log('Iniciando processo de atribuição:', {
+        researcherId,
+        surveyId
+      });
+
       // Verificar se o pesquisador existe e é um pesquisador
       const { data: researcher, error: researcherError } = await supabase
         .from('users')
-        .select('role, name')
+        .select('id, role, name')
         .eq('id', researcherId)
         .single();
 
-      if (researcherError) throw researcherError;
-      if (!researcher) throw new Error('Pesquisador não encontrado');
-      if (researcher.role !== 'researcher') throw new Error('Usuário não é um pesquisador');
+      if (researcherError) {
+        console.error('Erro ao verificar pesquisador:', researcherError);
+        throw researcherError;
+      }
+      if (!researcher) {
+        throw new Error('Pesquisador não encontrado');
+      }
+      if (researcher.role !== 'researcher') {
+        throw new Error('Usuário não é um pesquisador');
+      }
+
+      console.log('Pesquisador verificado:', researcher);
 
       // Verificar se a pesquisa existe
       const { data: survey, error: surveyError } = await supabase
@@ -225,8 +239,15 @@ export const useUserStore = create<UserState>((set, get) => ({
         .eq('id', surveyId)
         .single();
 
-      if (surveyError) throw surveyError;
-      if (!survey) throw new Error('Pesquisa não encontrada');
+      if (surveyError) {
+        console.error('Erro ao verificar pesquisa:', surveyError);
+        throw surveyError;
+      }
+      if (!survey) {
+        throw new Error('Pesquisa não encontrada');
+      }
+
+      console.log('Pesquisa verificada:', survey);
       
       // Verificar se já existe uma atribuição
       const { data: existingAssignment, error: existingError } = await supabase
@@ -236,12 +257,13 @@ export const useUserStore = create<UserState>((set, get) => ({
         .eq('survey_id', surveyId)
         .maybeSingle();
 
-      if (existingError) throw existingError;
+      if (existingError) {
+        console.error('Erro ao verificar atribuição existente:', existingError);
+        throw existingError;
+      }
+
       if (existingAssignment) {
-        console.log('Atribuição já existe para:', {
-          researcher: researcher.name,
-          survey: survey.name
-        });
+        console.log('Atribuição já existe:', existingAssignment);
         return;
       }
 
@@ -253,23 +275,33 @@ export const useUserStore = create<UserState>((set, get) => ({
         assigned_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
+      console.log('Criando nova atribuição:', assignment);
+
+      const { data: createdAssignment, error: insertError } = await supabase
         .from('survey_assignments')
         .insert([assignment])
         .select('*')
         .single();
 
-      if (error) throw error;
+      if (insertError) {
+        console.error('Erro ao criar atribuição:', insertError);
+        throw insertError;
+      }
 
-      console.log('Pesquisa atribuída com sucesso:', {
+      if (!createdAssignment) {
+        throw new Error('Erro ao criar atribuição: nenhum dado retornado');
+      }
+
+      console.log('Atribuição criada com sucesso:', {
         researcher: researcher.name,
         survey: survey.name,
-        assignment: data
+        assignment: createdAssignment
       });
       
       set({ isLoading: false });
+      return createdAssignment;
     } catch (err) {
-      console.error('Erro ao atribuir pesquisa:', err);
+      console.error('Erro detalhado ao atribuir pesquisa:', err);
       set({ 
         error: err instanceof Error ? err.message : 'Erro ao atribuir pesquisa ao usuário',
         isLoading: false 

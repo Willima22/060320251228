@@ -24,12 +24,31 @@ const ResearcherDashboardPage: React.FC = () => {
       return;
     }
 
-    console.log('Buscando atribuições para o usuário:', user.id);
+    console.log('Iniciando busca de atribuições para o usuário:', {
+      userId: user.id,
+      userRole: user.role
+    });
+    
     setIsLoading(true);
     setError(null);
 
     try {
-      const { data, error } = await supabase
+      // Primeiro, vamos verificar se o usuário existe na tabela users
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('id', user.id)
+        .single();
+
+      if (userError) {
+        console.error('Erro ao verificar usuário:', userError);
+        throw userError;
+      }
+
+      console.log('Dados do usuário encontrados:', userData);
+
+      // Agora busca as atribuições
+      const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('survey_assignments')
         .select(`
           id,
@@ -43,15 +62,20 @@ const ResearcherDashboardPage: React.FC = () => {
         .eq('researcher_id', user.id)
         .order('assigned_at', { ascending: false });
 
-      if (error) throw error;
+      if (assignmentsError) {
+        console.error('Erro ao buscar atribuições:', assignmentsError);
+        throw assignmentsError;
+      }
 
-      if (!data) {
-        console.log('Nenhuma atribuição encontrada');
+      console.log('Dados brutos das atribuições:', assignmentsData);
+
+      if (!assignmentsData) {
+        console.log('Nenhuma atribuição encontrada para o usuário');
         setAssignments([]);
         return;
       }
 
-      const validAssignments = data
+      const validAssignments = assignmentsData
         .filter((item): item is AssignmentWithSurvey => {
           if (!item.survey) {
             console.warn('Item sem dados da pesquisa:', item);
@@ -64,11 +88,19 @@ const ResearcherDashboardPage: React.FC = () => {
           survey: item.survey as Survey
         }));
 
-      console.log('Atribuições carregadas:', validAssignments.length);
+      console.log('Atribuições processadas:', {
+        total: validAssignments.length,
+        assignments: validAssignments
+      });
+      
       setAssignments(validAssignments);
     } catch (err) {
-      console.error('Erro ao carregar pesquisas:', err);
-      setError('Erro ao carregar pesquisas atribuídas. Por favor, tente novamente.');
+      console.error('Erro detalhado ao carregar pesquisas:', err);
+      setError(
+        err instanceof Error 
+          ? `Erro ao carregar pesquisas: ${err.message}`
+          : 'Erro ao carregar pesquisas atribuídas. Por favor, tente novamente.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -123,6 +155,99 @@ const ResearcherDashboardPage: React.FC = () => {
     }
   };
 
+  // Função para testar as permissões do Supabase
+  const testSupabasePermissions = async () => {
+    if (!user) {
+      console.log('❌ Usuário não está logado');
+      return;
+    }
+
+    console.log('🔍 Iniciando testes de permissão do Supabase...');
+    console.log('👤 Usuário atual:', {
+      id: user.id,
+      role: user.role,
+      email: user.email
+    });
+
+    try {
+      // 1. Teste de leitura da tabela users
+      console.log('1️⃣ Testando acesso à tabela users...');
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (userError) {
+        console.log('❌ Erro ao acessar tabela users:', userError);
+      } else {
+        console.log('✅ Acesso à tabela users OK:', userData);
+      }
+
+      // 2. Teste de leitura da tabela survey_assignments
+      console.log('2️⃣ Testando acesso à tabela survey_assignments...');
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from('survey_assignments')
+        .select('*')
+        .eq('researcher_id', user.id);
+
+      if (assignmentsError) {
+        console.log('❌ Erro ao acessar tabela survey_assignments:', assignmentsError);
+      } else {
+        console.log('✅ Acesso à tabela survey_assignments OK:', assignmentsData);
+      }
+
+      // 3. Teste de leitura da tabela surveys
+      console.log('3️⃣ Testando acesso à tabela surveys...');
+      const { data: surveysData, error: surveysError } = await supabase
+        .from('surveys')
+        .select('*');
+
+      if (surveysError) {
+        console.log('❌ Erro ao acessar tabela surveys:', surveysError);
+      } else {
+        console.log('✅ Acesso à tabela surveys OK:', surveysData);
+      }
+
+      // 4. Teste de join entre survey_assignments e surveys
+      console.log('4️⃣ Testando join entre survey_assignments e surveys...');
+      const { data: joinData, error: joinError } = await supabase
+        .from('survey_assignments')
+        .select(`
+          id,
+          survey_id,
+          researcher_id,
+          status,
+          assigned_at,
+          completed_at,
+          survey:surveys(*)
+        `)
+        .eq('researcher_id', user.id);
+
+      if (joinError) {
+        console.log('❌ Erro ao fazer join:', joinError);
+      } else {
+        console.log('✅ Join OK:', joinData);
+      }
+
+      console.log('🏁 Testes de permissão concluídos');
+    } catch (err) {
+      console.error('❌ Erro nos testes:', err);
+    }
+  };
+
+  // Adiciona botão de teste na interface
+  const renderTestButton = () => (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={testSupabasePermissions}
+      className="mb-4"
+    >
+      Testar Permissões do Supabase
+    </Button>
+  );
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -131,25 +256,26 @@ const ResearcherDashboardPage: React.FC = () => {
     );
   }
 
-  if (error) {
-    return (
-      <Alert variant="error" className="mb-4">
-        {error}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchAssignments}
-          className="mt-2"
-        >
-          Tentar Novamente
-        </Button>
-      </Alert>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Minhas Pesquisas</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Minhas Pesquisas</h1>
+        {renderTestButton()}
+      </div>
+
+      {error && (
+        <Alert variant="error" className="mb-4">
+          {error}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchAssignments}
+            className="mt-2"
+          >
+            Tentar Novamente
+          </Button>
+        </Alert>
+      )}
 
       {assignments.length === 0 ? (
         <Card>
