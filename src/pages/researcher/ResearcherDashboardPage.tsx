@@ -8,32 +8,52 @@ import { Link } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import Alert from '../../components/ui/Alert';
 
-interface AssignmentWithSurvey extends SurveyAssignment {
-  survey: Survey;
+// Definindo tipos mais específicos
+interface SurveyData {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  [key: string]: any; // para outros campos
+}
+
+interface AssignmentData {
+  id: string;
+  survey_id: string;
+  researcher_id: string;
+  status: string;
+  assigned_at: string;
+  completed_at: string | null;
+  survey: SurveyData;
+  [key: string]: any; // para outros campos
 }
 
 const ResearcherDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
-  const [assignments, setAssignments] = useState<AssignmentWithSurvey[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
   const fetchAssignments = useCallback(async () => {
     if (!user) {
-      console.log('Usuário não está logado');
+      console.log('❌ Usuário não está logado');
       return;
     }
 
-    console.log('Iniciando busca de atribuições para o usuário:', {
+    console.log('🔄 Iniciando busca de atribuições...', {
+      timestamp: new Date().toISOString(),
       userId: user.id,
-      userRole: user.role
+      userEmail: user.email,
+      userRole: user.role,
+      lastFetch: lastFetch?.toISOString()
     });
     
     setIsLoading(true);
     setError(null);
 
     try {
-      // Primeiro, vamos verificar se o usuário existe na tabela users
+      // Primeiro, verifica se o usuário existe e tem papel de pesquisador
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('id, role')
@@ -41,67 +61,123 @@ const ResearcherDashboardPage: React.FC = () => {
         .single();
 
       if (userError) {
-        console.error('Erro ao verificar usuário:', userError);
-        throw userError;
+        throw new Error(`Erro ao verificar usuário: ${userError.message}`);
       }
 
-      console.log('Dados do usuário encontrados:', userData);
+      if (!userData || userData.role !== 'researcher') {
+        throw new Error('Usuário não tem permissão de pesquisador');
+      }
 
-      // Agora busca as atribuições
+      console.log('👤 Usuário verificado:', userData);
+
+      // Busca as atribuições com left join para as pesquisas
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('survey_assignments')
         .select(`
-          *,
-          survey:surveys!inner(*)
+          id,
+          survey_id,
+          researcher_id,
+          status,
+          assigned_at,
+          completed_at,
+          survey:surveys!left (
+            id,
+            name,
+            city,
+            state,
+            date,
+            contractor,
+            code,
+            current_manager
+          )
         `)
         .eq('researcher_id', user.id)
+        .is('deleted_at', null) // Garante que não pegue registros deletados
         .order('assigned_at', { ascending: false });
 
       if (assignmentsError) {
-        console.error('Erro ao buscar atribuições:', assignmentsError);
-        throw assignmentsError;
+        console.error('❌ Erro detalhado:', {
+          message: assignmentsError.message,
+          details: assignmentsError.details,
+          hint: assignmentsError.hint,
+          code: assignmentsError.code
+        });
+        throw new Error(`Erro ao buscar atribuições: ${assignmentsError.message}`);
       }
 
-      console.log('Dados brutos das atribuições:', assignmentsData);
-
       if (!assignmentsData) {
-        console.log('Nenhuma atribuição encontrada para o usuário');
+        console.warn('⚠️ Nenhum dado retornado na busca de atribuições');
         setAssignments([]);
         return;
       }
 
-      const validAssignments = assignmentsData
-        .filter((item): item is AssignmentWithSurvey => {
-          if (!item.survey) {
-            console.warn('Item sem dados da pesquisa:', item);
-            return false;
-          }
-          return true;
-        })
-        .map(item => ({
-          ...item,
-          survey: item.survey as Survey
-        }));
-
-      console.log('Atribuições processadas:', {
-        total: validAssignments.length,
-        assignments: validAssignments
+      console.log('📊 Dados recebidos:', {
+        total: assignmentsData.length,
+        assignments: assignmentsData.map(a => ({
+          id: a.id,
+          survey_id: a.survey_id,
+          status: a.status,
+          has_survey: !!a.survey,
+          assigned_at: new Date(a.assigned_at).toLocaleString()
+        }))
       });
-      
+
+      // Filtra atribuições válidas e ordena por data
+      const validAssignments = assignmentsData
+        .filter(assignment => {
+          const isValid = assignment.survey !== null;
+          if (!isValid) {
+            console.warn('⚠️ Atribuição inválida encontrada:', {
+              id: assignment.id,
+              survey_id: assignment.survey_id,
+              assigned_at: new Date(assignment.assigned_at).toLocaleString()
+            });
+          }
+          return isValid;
+        })
+        .sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime());
+
+      console.log('✅ Atribuições válidas:', {
+        total: validAssignments.length,
+        assignments: validAssignments.map(a => ({
+          id: a.id,
+          survey_name: a.survey.name,
+          status: a.status,
+          assigned_at: new Date(a.assigned_at).toLocaleString(),
+          city: a.survey.city,
+          state: a.survey.state
+        }))
+      });
+
+      if (validAssignments.length === 0) {
+        console.log('ℹ️ Nenhuma atribuição válida encontrada');
+      }
+
       setAssignments(validAssignments);
+      setLastFetch(new Date());
     } catch (err) {
-      console.error('Erro detalhado ao carregar pesquisas:', err);
-      setError(
-        err instanceof Error 
-          ? `Erro ao carregar pesquisas: ${err.message}`
-          : 'Erro ao carregar pesquisas atribuídas. Por favor, tente novamente.'
-      );
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error('❌ Erro ao carregar pesquisas:', errorMessage);
+      setError(`Erro ao carregar pesquisas: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, lastFetch]);
 
   useEffect(() => {
+    if (!user) {
+      console.log('❌ Usuário não está logado, limpando dados...');
+      setAssignments([]);
+      setError(null);
+      return;
+    }
+
+    console.log('🔄 Configurando página do pesquisador...', {
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role
+    });
+
     fetchAssignments();
 
     // Inscrever para atualizações em tempo real
@@ -113,18 +189,25 @@ const ResearcherDashboardPage: React.FC = () => {
           event: '*',
           schema: 'public',
           table: 'survey_assignments',
-          filter: `researcher_id=eq.${user?.id}`
+          filter: `researcher_id=eq.${user.id}`
         },
         (payload) => {
-          console.log('Mudança detectada nas atribuições:', payload);
+          console.log('🔔 Mudança detectada:', payload);
           fetchAssignments();
         }
       )
       .subscribe();
 
+    // Atualizar a cada 5 minutos
+    const intervalId = setInterval(() => {
+      console.log('⏰ Atualizando dados automaticamente...');
+      fetchAssignments();
+    }, 5 * 60 * 1000);
+
     return () => {
-      console.log('Cancelando inscrição de atualizações em tempo real');
+      console.log('🧹 Limpando recursos...');
       assignmentsSubscription.unsubscribe();
+      clearInterval(intervalId);
     };
   }, [user, fetchAssignments]);
 
@@ -198,15 +281,57 @@ const ResearcherDashboardPage: React.FC = () => {
 
       // 3. Teste de leitura da tabela surveys
       console.log('3️⃣ Testando acesso direto à tabela surveys...');
-      const { data: surveysData, error: surveysError } = await supabase
-        .from('surveys')
-        .select('*');
+      
+      // Primeiro busca as atribuições para obter os IDs das pesquisas
+      const { data: testAssignments, error: testAssignmentsError } = await supabase
+        .from('survey_assignments')
+        .select('survey_id, survey:surveys(name)')
+        .eq('researcher_id', user.id);
 
-      if (surveysError) {
-        console.log('❌ Erro ao acessar tabela surveys:', surveysError);
+      if (testAssignmentsError) {
+        console.log('❌ Erro ao buscar atribuições para teste:', testAssignmentsError);
       } else {
-        console.log('✅ Acesso à tabela surveys OK:', surveysData);
-        console.log('📊 Número de pesquisas acessíveis:', surveysData?.length || 0);
+        console.log('✅ Atribuições para teste encontradas:', testAssignments);
+        console.log('📝 Detalhes das atribuições:', testAssignments.map(a => ({
+          survey_id: a.survey_id,
+          survey_name: a.survey?.name || 'Nome não encontrado'
+        })));
+        
+        // Agora testa o acesso às pesquisas atribuídas
+        const testSurveyIds = testAssignments.map(a => a.survey_id);
+        console.log('🔍 Tentando acessar pesquisas com IDs:', testSurveyIds);
+
+        const { data: surveysData, error: surveysError } = await supabase
+          .from('surveys')
+          .select('*')
+          .in('id', testSurveyIds);
+
+        if (surveysError) {
+          console.log('❌ Erro ao acessar tabela surveys:', surveysError);
+          console.log('📝 Detalhes do erro:', {
+            message: surveysError.message,
+            details: surveysError.details,
+            hint: surveysError.hint,
+            code: surveysError.code
+          });
+        } else {
+          console.log('✅ Acesso à tabela surveys OK:', surveysData);
+          console.log('📊 Número de pesquisas acessíveis:', surveysData?.length || 0);
+          console.log('📝 Pesquisas encontradas:', surveysData?.map(s => ({
+            id: s.id,
+            name: s.name,
+            city: s.city,
+            state: s.state
+          })));
+          
+          // Verifica pesquisas que não foram encontradas
+          const foundIds = new Set(surveysData?.map(s => s.id) || []);
+          const missingIds = testSurveyIds.filter(id => !foundIds.has(id));
+          if (missingIds.length > 0) {
+            console.log('⚠️ Pesquisas não encontradas:', missingIds);
+            console.log('⚠️ Atribuições correspondentes:', testAssignments.filter(a => missingIds.includes(a.survey_id)));
+          }
+        }
       }
 
       // 4. Teste de join entre survey_assignments e surveys
@@ -270,19 +395,75 @@ const ResearcherDashboardPage: React.FC = () => {
     </Button>
   );
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  // Renderiza o card de uma atribuição
+  const renderAssignmentCard = (assignment: AssignmentData) => (
+    <Card key={assignment.id}>
+      <CardContent className="p-6">
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <h3 className="text-lg font-medium">
+              {assignment.survey.name || 'Nome não disponível'}
+            </h3>
+            <p className="text-sm text-gray-500">
+              {assignment.survey.city || 'Cidade não disponível'}, {assignment.survey.state || 'Estado não disponível'}
+            </p>
+            <div className="flex items-center space-x-2">
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(
+                  assignment.status
+                )}`}
+              >
+                {getStatusText(assignment.status)}
+              </span>
+              {assignment.assigned_at && (
+                <span className="text-xs text-gray-500">
+                  Atribuída em: {new Date(assignment.assigned_at).toLocaleDateString()}
+                </span>
+              )}
+              {assignment.completed_at && (
+                <span className="text-xs text-gray-500">
+                  Concluída em: {new Date(assignment.completed_at).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
+          <Link to={`/surveys/${assignment.survey_id}/fill`}>
+            <Button>
+              {assignment.status === 'completed' ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Ver Respostas
+                </>
+              ) : (
+                <>
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Preencher Pesquisa
+                </>
+              )}
+            </Button>
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Minhas Pesquisas</h1>
-        {renderTestButton()}
+        <div className="flex space-x-2">
+          {renderTestButton()}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              console.log('🔄 Atualizando manualmente...');
+              fetchAssignments();
+            }}
+          >
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -299,7 +480,11 @@ const ResearcherDashboardPage: React.FC = () => {
         </Alert>
       )}
 
-      {assignments.length === 0 ? (
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
+      ) : assignments.length === 0 ? (
         <Card>
           <CardContent className="p-6">
             <p className="text-gray-500 text-center">
@@ -309,54 +494,7 @@ const ResearcherDashboardPage: React.FC = () => {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {assignments.map((assignment) => (
-            <Card key={assignment.id}>
-              <CardContent className="p-6">
-                <div className="flex justify-between items-center">
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-medium">{assignment.survey.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {assignment.survey.city}, {assignment.survey.state}
-                    </p>
-                    <div className="flex items-center space-x-2">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(
-                          assignment.status
-                        )}`}
-                      >
-                        {getStatusText(assignment.status)}
-                      </span>
-                      {assignment.assigned_at && (
-                        <span className="text-xs text-gray-500">
-                          Atribuída em: {new Date(assignment.assigned_at).toLocaleDateString()}
-                        </span>
-                      )}
-                      {assignment.completed_at && (
-                        <span className="text-xs text-gray-500">
-                          Concluída em: {new Date(assignment.completed_at).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <Link to={`/surveys/${assignment.survey_id}/fill`}>
-                    <Button>
-                      {assignment.status === 'completed' ? (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Ver Respostas
-                        </>
-                      ) : (
-                        <>
-                          <ClipboardList className="h-4 w-4 mr-2" />
-                          Preencher Pesquisa
-                        </>
-                      )}
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {assignments.map(renderAssignmentCard)}
         </div>
       )}
     </div>
